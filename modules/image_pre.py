@@ -1,4 +1,4 @@
-from PIL import Image
+from PIL import Image, ImageOps
 from torchvision.transforms import PILToTensor, ToPILImage, GaussianBlur
 import requests
 import torch
@@ -27,6 +27,11 @@ def load_image_from_url(url : str) -> tuple[torch.Tensor, torch.Tensor | None]:
     """
 
     img = Image.open(requests.get(url, stream= True).raw)
+    exif_data = img.getexif()
+
+    if exif_data:
+        img = ImageOps.exif_transpose(img)
+    
     mask = None
     img_rgb = img.convert('RGB')
     ts = PILToTensor()(img_rgb).unsqueeze(0) / 255.
@@ -72,6 +77,7 @@ def resize_image(img : torch.Tensor, h : int, w : int = 0, keep_ratio = True, mo
 
     return img
 
+#TODO Add stitch function
 
 def crop_mask(img : torch.Tensor, mask : torch.Tensor, padding = 0):
     """
@@ -88,6 +94,10 @@ def crop_mask(img : torch.Tensor, mask : torch.Tensor, padding = 0):
     _, _, height, width = img.size()
     
     non_zero_id = torch.nonzero(mask.squeeze(0))
+
+    if not non_zero_id:
+        raise Exception('Cannot Crop on Empty Mask')
+    
     print(non_zero_id.size())
 
     x1 = torch.clamp(torch.min(non_zero_id[:, 2]) - padding, min = 0)
@@ -98,7 +108,7 @@ def crop_mask(img : torch.Tensor, mask : torch.Tensor, padding = 0):
     crop_img = img[:, :, y1:y2 +1 , x1:x2 +1]
     crop_mask = mask[:, :, y1:y2 +1 , x1:x2 +1]
     
-    out = InpaintStitch(original= [img, mask], cropped = [crop_img, crop_mask], coords= [(x1, y1), (x2, y2)])
+    out = InpaintStitch(original= (img, mask), cropped = (crop_img, crop_mask), coords= [(x1, y1), (x2, y2)])
     return out
 
 
