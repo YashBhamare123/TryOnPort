@@ -7,7 +7,26 @@ import matplotlib.pyplot as plt
 from pydantic import BaseModel
 import torch
 
-from config import SegmentCategories
+
+class SegmentCategories(BaseModel):
+    background: bool = False
+    hat: bool = False
+    hair: bool = False
+    sunglasses: bool = False
+    upper_clothes: bool = False
+    skirt: bool = False
+    pants: bool = False
+    dress: bool = False
+    belt: bool = False
+    left_shoe: bool = False
+    right_shoe: bool = False
+    face: bool = False
+    left_leg: bool = False
+    right_leg: bool = False
+    left_arm: bool = False
+    right_arm: bool = False
+    bag: bool = False
+    scarf: bool = False
 
 def create_masks(img : torch.Tensor, labels: SegmentCategories) -> torch.Tensor:
 
@@ -49,7 +68,7 @@ def create_masks(img : torch.Tensor, labels: SegmentCategories) -> torch.Tensor:
     for i in cats_off:
         pred_seg[pred_seg == i] = 0.
     
-    pred_seg = pred_seg / 255.
+    pred_seg = pred_seg/ 255.
     
 
     return pred_seg.unsqueeze(0).unsqueeze(0)
