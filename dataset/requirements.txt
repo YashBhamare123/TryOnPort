@@ -1,0 +1,6 @@
+Pillow
+datasets
+ultralytics
+torch
+torchvision
+tqdm
