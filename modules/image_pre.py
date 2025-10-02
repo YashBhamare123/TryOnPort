@@ -4,9 +4,11 @@ import requests
 import torch
 import torch.nn.functional as F
 from pydantic import BaseModel
+from io import BytesIO
 
 from segformer import create_masks, SegmentCategories
 from config import PreprocessConfig
+from utils import show_tensor
 
 class InpaintStitch(BaseModel, arbitrary_types_allowed=True):
     original : tuple[torch.Tensor, torch.Tensor]
@@ -26,11 +28,16 @@ def load_image_from_url(url : str) -> tuple[torch.Tensor, torch.Tensor | None]:
     
     """
 
-    img = Image.open(requests.get(url, stream= True).raw)
+    headers = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    }
+
+    img = Image.open(BytesIO(requests.get(url, headers= headers).content))
     exif_data = img.getexif()
 
-    if exif_data:
-        img = ImageOps.exif_transpose(img)
+
+    # if exif_data:
+    #     img = ImageOps.exif_transpose(img)
     
     mask = None
     img_rgb = img.convert('RGB')
@@ -41,8 +48,9 @@ def load_image_from_url(url : str) -> tuple[torch.Tensor, torch.Tensor | None]:
         print(mask.size())
     elif img.mode == 'P' and 'transparency' in img.info:
         mask = PILToTensor()(img.convert('RGBA').getchannel('A')).unsqueeze(0)/ 255.
+        ts = PILToTensor()(img.convert('RGBA').convert('RGB')).unsqueeze(0) / 255.
     
-    if mask:
+    if mask is not None:
         mask = mask.unsqueeze(0)
     
     return (ts, mask)
@@ -95,10 +103,10 @@ def crop_mask(img : torch.Tensor, mask : torch.Tensor, padding = 0):
     
     non_zero_id = torch.nonzero(mask.squeeze(0))
 
-    if not non_zero_id:
+    if non_zero_id.numel() == 0:
         raise Exception('Cannot Crop on Empty Mask')
     
-    print(non_zero_id.size())
+    print(non_zero_id[:, 2].size())
 
     x1 = torch.clamp(torch.min(non_zero_id[:, 2]) - padding, min = 0)
     x2 = torch.clamp(torch.max(non_zero_id[:, 2]) + padding, max = width -1)
@@ -123,36 +131,41 @@ def grow_and_blur_mask(mask : torch.Tensor, padding= 0):
     Returns:
         torch.Tensor: Processed mask with grown and blurred edges.
     """
-    mask = F.max_pool2d(mask, kernel_size= padding+ 1)
+    mask = F.max_pool2d(mask, kernel_size=2*padding + 1, stride=1, padding= (2*padding + 1 )// 2)
     blur = GaussianBlur(kernel_size= 5, sigma = 0.5)
     mask = blur(mask)
     return mask
 
 class PreprocessImage:
     def __init__(self, params : PreprocessConfig):
-        self.params = PreprocessConfig
+        self.params = params
     
     def preprocess(self, subject_url : str, garment_url : str):
         sub = load_image_from_url(subject_url)
         sub_img = sub[0]
+
+        # show_tensor(sub_img, 'after load')
+
         sub_trans_mask = sub[1]
         gar_img = load_image_from_url(garment_url)[0]
 
         sub_img = resize_image(sub_img, self.params.resized_height, self.params.resized_width, self.params.keep_ratio, self.params.resize_mode)
         gar_img = resize_image(gar_img, self.params.resized_height, self.params.resized_width, self.params.keep_ratio, self.params.resize_mode)
 
+        # show_tensor(sub_img, 'after resize')
         #TODO Replace this with intellisegment
-        labels_sub = SegmentCategories(upper_clothes= True)
-        labels_gar = SegmentCategories(upper_clothes = True)
+        labels_sub = SegmentCategories(face = True)
+        labels_gar = SegmentCategories(face = True)
 
         sub_mask = create_masks(sub_img, labels_sub)
         gar_mask = create_masks(gar_img, labels_gar)
 
         sub_crop = crop_mask(sub_img, sub_mask, padding = self.params.crop_padding)
         gar_crop = crop_mask(gar_img, gar_mask, padding = self.params.crop_padding)
-        sub_img, sub_mask = sub_crop.original
-        gar_img, gar_mask = gar_crop.original
+        sub_img, sub_mask = sub_crop.cropped
+        gar_img, gar_mask = gar_crop.cropped
 
+        # show_tensor(sub_img, 'After Crop')
         sub_img = resize_image(sub_img, 
                                self.params.resized_height, 
                                self.params.resized_width, 
@@ -175,12 +188,20 @@ class PreprocessImage:
                                 self.params.resize_mode)
         
         #TODO Replace this with transluent fill
-        gar_img[gar_mask == 0] = 0.5
+        gar_img[:, :, (gar_mask == 0.)[0, 0, :, :]] = 0.5
         sub_mask = grow_and_blur_mask(sub_mask, self.params.grow_padding)
 
-        blank_mask = torch.zeros(gar_img.size())
-        inpaint_img = torch.concat([sub_img, gar_img], dim = -2)
-        inpaint_mask = torch.concat([sub_mask, blank_mask], dim = -2)
+        # show_tensor(gar_img, 'after fill')
+        print(gar_img.size())
+        print(gar_mask.size())
+        print(sub_img.size())
+        print(sub_mask.size())
+        B, _, H, W = gar_img.size()
+
+
+        blank_mask = torch.zeros((B, 1, H, W))
+        inpaint_img = torch.concat([sub_img, gar_img], dim = -1)
+        inpaint_mask = torch.concat([sub_mask, blank_mask], dim = -1)
 
         _, _, H1, W1 = inpaint_img.size()
         _, _, H2, W2 = inpaint_mask.size()
@@ -188,19 +209,28 @@ class PreprocessImage:
         if (H1, W1) != (H2, W2):
             raise Exception('Height and Width of final image and final mask must match')
 
+        show_tensor(inpaint_img, 'inpaing_image')
+        show_tensor(inpaint_mask, 'inpaint_mask')
+
         return inpaint_img, inpaint_mask
 
 
 if __name__ == "__main__":
-    img, _ = load_image_from_url(url = 'https://plus.unsplash.com/premium_photo-1673210886161-bfcc40f54d1f?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxzZWFyY2h8MXx8cGVyc29uJTIwc3RhbmRpbmd8ZW58MHx8MHx8&w=1000&q=80')
-    seg_opts = SegmentCategories(upper_clothes= True, face=True)
-    print(img.size())
-    mask = create_masks(img, seg_opts)
-    out = crop_mask(img, mask, padding = 10)
-    
-    cropped_image = out.cropped[0]
-    pil = ToPILImage()(cropped_image[0])
-    pil.show()
+    params = PreprocessConfig(
+        resized_height= 1024,
+        keep_ratio= True,
+        crop_padding= 16,
+        grow_padding= 20
+    )
+
+    sub_url = 'https://images.squarespace-cdn.com/content/v1/6204821bfe06b76898b431c5/fdef880a-4122-42f7-ab19-71da5b547a19/AW5A2197.jpg'
+    gar_url = 'https://i.pinimg.com/736x/fb/ff/fa/fbfffa4d0f25196020914a07852a0990.jpg'
+
+    processor = PreprocessImage(params)
+    out = processor.preprocess(sub_url, gar_url)
+    show_tensor(out[0])
+    show_tensor(out[1])
+
     
 
 
