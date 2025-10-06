@@ -6,9 +6,9 @@ import torch.nn.functional as F
 from pydantic import BaseModel
 from io import BytesIO
 
-from segformer import create_masks, SegmentCategories
-from config import PreprocessConfig
-from utils import show_tensor
+from .segformer import create_masks, SegmentCategories
+from .config import PreprocessConfig
+from .utils import show_tensor
 
 class InpaintStitch(BaseModel, arbitrary_types_allowed=True):
     original : tuple[torch.Tensor, torch.Tensor]
