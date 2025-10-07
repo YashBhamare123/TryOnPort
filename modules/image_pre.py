@@ -36,8 +36,8 @@ def load_image_from_url(url : str) -> tuple[torch.Tensor, torch.Tensor | None]:
     exif_data = img.getexif()
 
 
-    # if exif_data:
-    #     img = ImageOps.exif_transpose(img)
+    if exif_data:
+        img = ImageOps.exif_transpose(img)
     
     mask = None
     img_rgb = img.convert('RGB')
@@ -154,8 +154,28 @@ class PreprocessImage:
 
         # show_tensor(sub_img, 'after resize')
         #TODO Replace this with intellisegment
-        labels_sub = SegmentCategories(face = True)
-        labels_gar = SegmentCategories(face = True)
+        obj = {
+        "background": True,
+        "hat": True,
+        "hair": True,
+        "sunglasses": True,
+        "upper_clothes": True,
+        "skirt": True,
+        "pants": True,
+        "dress": True,
+        "belt": True,
+        "left_shoe": True,
+        "right_shoe": True,
+        "face": True,
+        "left_leg": True,
+        "right_leg": True,
+        "left_arm": True,
+        "right_arm": True,
+        "bag": True,
+        "scarf": True
+        }
+        labels_sub = SegmentCategories(upper_clothes= True)
+        labels_gar = SegmentCategories(**obj)
 
         sub_mask = create_masks(sub_img, labels_sub)
         gar_mask = create_masks(gar_img, labels_gar)
@@ -223,11 +243,14 @@ if __name__ == "__main__":
         grow_padding= 20
     )
 
-    sub_url = 'https://images.squarespace-cdn.com/content/v1/6204821bfe06b76898b431c5/fdef880a-4122-42f7-ab19-71da5b547a19/AW5A2197.jpg'
-    gar_url = 'https://i.pinimg.com/736x/fb/ff/fa/fbfffa4d0f25196020914a07852a0990.jpg'
+    subject_url = "https://res.cloudinary.com/dukgi26uv/image/upload/v1759842454/the-nude-v-neck-pointelle-knit-tee-tops-snhkxv_2048x_bfnch4.webp"
+    garment_url = "https://res.cloudinary.com/dukgi26uv/image/upload/v1759842480/Manchester_United_Home_92.94_Shirt_kyajol.webp"
+
+    ts, _ = load_image_from_url(garment_url)
+    show_tensor(ts)
 
     processor = PreprocessImage(params)
-    out = processor.preprocess(sub_url, gar_url)
+    out = processor.preprocess(subject_url, garment_url)
     show_tensor(out[0])
     show_tensor(out[1])
 
