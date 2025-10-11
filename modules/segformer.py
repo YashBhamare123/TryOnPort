@@ -8,6 +8,7 @@ from pydantic import BaseModel
 import torch
 
 
+
 class SegmentCategories(BaseModel):
     background: bool = False
     hat: bool = False
@@ -27,6 +28,8 @@ class SegmentCategories(BaseModel):
     right_arm: bool = False
     bag: bool = False
     scarf: bool = False
+    lower_neck : bool = False
+
 
 def create_masks(img : torch.Tensor, labels: SegmentCategories) -> torch.Tensor:
 
@@ -43,8 +46,8 @@ def create_masks(img : torch.Tensor, labels: SegmentCategories) -> torch.Tensor:
     img = img[0]
     pil_img = ToPILImage()(img)
 
-    processor = SegformerImageProcessor.from_pretrained('mattmdjaga/segformer_b2_clothes')
-    model = AutoModelForSemanticSegmentation.from_pretrained('mattmdjaga/segformer_b2_clothes')
+    processor = SegformerImageProcessor.from_pretrained('YashBhamare123/segformer_finetune', subfolder = 'segformer_b2_clothes_epoch_13')
+    model = AutoModelForSemanticSegmentation.from_pretrained('YashBhamare123/segformer_finetune', subfolder = 'segformer_b2_clothes_epoch_13')
     inputs = processor(pil_img, return_tensors = 'pt')
     out = model(**inputs)
 

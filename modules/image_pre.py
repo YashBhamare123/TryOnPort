@@ -9,6 +9,7 @@ from io import BytesIO
 from .segformer import create_masks, SegmentCategories
 from .config import PreprocessConfig
 from .utils import show_tensor
+from .intellisegment import get_segments
 
 class InpaintStitch(BaseModel, arbitrary_types_allowed=True):
     original : tuple[torch.Tensor, torch.Tensor]
@@ -172,9 +173,14 @@ class PreprocessImage:
         "left_arm": True,
         "right_arm": True,
         "bag": True,
-        "scarf": True
+        "scarf": True,
+        "lower_neck": True
         }
-        labels_sub = SegmentCategories(upper_clothes= True)
+
+        labels_sub = SegmentCategories(**get_segments(subject_url, garment_url))
+        if labels_sub.upper_clothes or labels_sub.dress:
+            labels_sub.lower_neck = True
+
         labels_gar = SegmentCategories(**obj)
 
         sub_mask = create_masks(sub_img, labels_sub)
