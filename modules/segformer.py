@@ -31,7 +31,56 @@ class SegmentCategories(BaseModel):
     lower_neck : bool = False
 
 
-def create_masks(img : torch.Tensor, labels: SegmentCategories) -> torch.Tensor:
+class FashionLabels(BaseModel):
+    unlabelled: bool = True
+    shirt_blouse: bool = True
+    top_t_shirt_sweatshirt: bool = True
+    sweater: bool = True
+    cardigan: bool = True
+    jacket: bool = True
+    vest: bool = True
+    pants: bool = True
+    shorts: bool = True
+    skirt: bool = True
+    coat: bool = True
+    dress: bool = True
+    jumpsuit: bool = True
+    cape: bool = True
+    glasses: bool = True
+    hat: bool = True
+    headband_head_covering_hair_accessory: bool = True
+    tie: bool = True
+    glove: bool = True
+    watch: bool = True
+    belt: bool = True
+    leg_warmer: bool = True
+    tights_stockings: bool = True
+    sock: bool = True
+    shoe: bool = True
+    bag_wallet: bool = True
+    scarf: bool = True
+    umbrella: bool = True
+    hood: bool = True
+    collar: bool = True
+    lapel: bool = True
+    epaulette: bool = True
+    sleeve: bool = True
+    pocket: bool = True
+    neckline: bool = True
+    buckle: bool = True
+    zipper: bool = True
+    applique: bool = True
+    bead: bool = True
+    bow: bool = True
+    flower: bool = True
+    fringe: bool = True
+    ribbon: bool = True
+    rivet: bool = True
+    ruffle: bool = True
+    sequin: bool = True
+    tassel: bool = True
+
+def create_masks_subject(img : torch.Tensor, labels: SegmentCategories) -> torch.Tensor:
 
     """
     Generates a binary mask tensor for a given input image based on specified segment categories using a pre-trained SegFormer semantic segmentation model.
@@ -76,13 +125,46 @@ def create_masks(img : torch.Tensor, labels: SegmentCategories) -> torch.Tensor:
 
     return pred_seg.unsqueeze(0).unsqueeze(0)
 
+def create_masks_garment(img: torch.Tensor, labels: FashionLabels) -> torch.Tensor:
+    img = img[0]
+    img = ToPILImage()(img)
+
+    processor = SegformerImageProcessor.from_pretrained('sayeed99/segformer-b3-fashion')
+    model = AutoModelForSemanticSegmentation.from_pretrained('sayeed99/segformer-b3-fashion')
+
+    inps = processor(img, return_tensors = 'pt')
+    out = model(**inps)
+    logits = out.logits.detach().cpu()
+    upsampled_logits = nn.functional.interpolate(
+        input = logits,
+        size = img.size[::-1],
+        mode = 'bilinear',
+        align_corners= False
+    )
+    pred_seg = torch.argmax(upsampled_logits, dim = 1)[0]
+
+    cats_on = [i for i, v in enumerate(labels.model_dump().values()) if v]
+    cats_off = [i for i, v in enumerate(labels.model_dump().values()) if not v]
+
+    for i in cats_on:
+        pred_seg[pred_seg == i] = 255.
     
+    for i in cats_off:
+        pred_seg[pred_seg == i] = 0.
+    
+    pred_seg = pred_seg/ 255.
+    
+
+    return pred_seg.unsqueeze(0).unsqueeze(0)
+
+
 if __name__ == "__main__":
-    url = 'https://plus.unsplash.com/premium_photo-1673210886161-bfcc40f54d1f?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxzZWFyY2h8MXx8cGVyc29uJTIwc3RhbmRpbmd8ZW58MHx8MHx8&w=1000&q=80'
+    url = 'https://res.cloudinary.com/dukgi26uv/image/upload/v1754141234/tryon-images/wrcx1xhsyvm2bad017h2.webp'
     img = Image.open(requests.get(url, stream = True).raw)
     img = PILToTensor()(img).unsqueeze(0)
     labels = SegmentCategories(upper_clothes= True, pants = True)
-    mask = create_masks(img, labels)
+    labels_gar = FashionLabels(unlabelled= False)
+    mask = create_masks_garment(img, labels_gar)
     plt.imshow(mask[0][0])
     plt.show()
 

@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from pydantic import BaseModel
 from io import BytesIO
 
-from .segformer import create_masks, SegmentCategories
+from .segformer import create_masks_subject, create_masks_garment, SegmentCategories, FashionLabels
 from .config import PreprocessConfig
 from .utils import show_tensor
 from .intellisegment import get_segments
@@ -154,37 +154,15 @@ class PreprocessImage:
         gar_img = resize_image(gar_img, self.params.resized_height, self.params.resized_width, self.params.keep_ratio, self.params.resize_mode)
 
         # show_tensor(sub_img, 'after resize')
-        #TODO Replace this with intellisegment
-        obj = {
-        "background": True,
-        "hat": True,
-        "hair": True,
-        "sunglasses": True,
-        "upper_clothes": True,
-        "skirt": True,
-        "pants": True,
-        "dress": True,
-        "belt": True,
-        "left_shoe": True,
-        "right_shoe": True,
-        "face": True,
-        "left_leg": True,
-        "right_leg": True,
-        "left_arm": True,
-        "right_arm": True,
-        "bag": True,
-        "scarf": True,
-        "lower_neck": True
-        }
 
         labels_sub = SegmentCategories(**get_segments(subject_url, garment_url))
         if labels_sub.upper_clothes or labels_sub.dress:
             labels_sub.lower_neck = True
 
-        labels_gar = SegmentCategories(**obj)
+        labels_gar = FashionLabels(unlabelled= False)
 
-        sub_mask = create_masks(sub_img, labels_sub)
-        gar_mask = create_masks(gar_img, labels_gar)
+        sub_mask = create_masks_subject(sub_img, labels_sub)
+        gar_mask = create_masks_garment(gar_img, labels_gar)
 
         sub_crop = crop_mask(sub_img, sub_mask, padding = self.params.crop_padding)
         gar_crop = crop_mask(gar_img, gar_mask, padding = self.params.crop_padding)
