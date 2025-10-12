@@ -219,6 +219,7 @@ class PreprocessImage:
         return inpaint_img, inpaint_mask
 
 
+
 if __name__ == "__main__":
     params = PreprocessConfig(
         resized_height= 1024,
