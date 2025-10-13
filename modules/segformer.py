@@ -92,14 +92,19 @@ def create_masks_subject(img : torch.Tensor, labels: SegmentCategories) -> torch
     Returns:
         torch.Tensor: A mask tensor of shape (1, 1, H, W) where each pixel is set to 1 if it belongs to any of the "on" categories, and 0 otherwise.
     """
+    print('inside_seg1')
     img = img[0]
     pil_img = ToPILImage()(img)
 
     processor = SegformerImageProcessor.from_pretrained('YashBhamare123/segformer_finetune', subfolder = 'segformer_b2_clothes_epoch_13')
     model = AutoModelForSemanticSegmentation.from_pretrained('YashBhamare123/segformer_finetune', subfolder = 'segformer_b2_clothes_epoch_13')
+    model = model.to('cuda')
+    print('after_loading_1')
     inputs = processor(pil_img, return_tensors = 'pt')
+    inputs['pixel_values'] = inputs['pixel_values'].to('cuda')
     out = model(**inputs)
 
+    print('after_out_1')
     logits =out.logits.detach().cpu()
     upsampled_logits = nn.functional.interpolate(
         logits,
@@ -122,7 +127,7 @@ def create_masks_subject(img : torch.Tensor, labels: SegmentCategories) -> torch
     
     pred_seg = pred_seg/ 255.
     
-
+    print('after_laelling_1')
     return pred_seg.unsqueeze(0).unsqueeze(0)
 
 def create_masks_garment(img: torch.Tensor, labels: FashionLabels) -> torch.Tensor:
@@ -131,8 +136,9 @@ def create_masks_garment(img: torch.Tensor, labels: FashionLabels) -> torch.Tens
 
     processor = SegformerImageProcessor.from_pretrained('sayeed99/segformer-b3-fashion')
     model = AutoModelForSemanticSegmentation.from_pretrained('sayeed99/segformer-b3-fashion')
-
+    model = model.to('cuda')
     inps = processor(img, return_tensors = 'pt')
+    inps['pixel_values'] = inps['pixel_values'].to('cuda')
     out = model(**inps)
     logits = out.logits.detach().cpu()
     upsampled_logits = nn.functional.interpolate(

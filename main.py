@@ -4,13 +4,14 @@ from diffusers import FluxFillPipeline, FluxPriorReduxPipeline, AutoencoderKL, F
 from transformers import T5EncoderModel, CLIPTextModel, CLIPTokenizer, T5TokenizerFast
 from diffusers.utils import load_image
 from huggingface_hub import hf_hub_download
-from torchvision.transforms import ToPILImage
+from torchvision.transforms import ToPILImage, ToTensor
 
 from modules.image_pre import PreprocessImage, PreprocessConfig
 from sampling.utils import zero_out, apply_flux_guidance
 from sampling.apply_clip import run_clip
 from sampling.apply_style import load_style_model, apply_stylemodel, CLIPOutputWrapper
 from sampling.config import GenerateConfig
+from logo.detector import process_logo, deconcatenation
 
 
 def prepare_embeddings_for_diffusers(positive_conds, negative_conds, dtype, device):
@@ -43,37 +44,37 @@ def generate(subject_url : str, garment_url : str, params : GenerateConfig):
     CONDITIONING_PATH = "/teamspace/studios/this_studio/Redux-Finetune/TryOnPort/text_cache.conditioning"
     REPO_CLIP = "google/siglip-so400m-patch14-384"
 
-    initial_conditioning = None
-    conditioning = []
-    if params.cache_conditioning:
-        initial_conditioning = joblib.load(CONDITIONING_PATH)
+    # initial_conditioning = None
+    # conditioning = []
+    # if params.cache_conditioning:
+    #     initial_conditioning = joblib.load(CONDITIONING_PATH)
 
-        for ts, dict_part in initial_conditioning:
-            ts = ts.to(params.device)
-            new_dict_part = {k: v.to(params.device) if isinstance(v, torch.Tensor) else v for k, v in dict_part.items()}
-            conditioning.append([ts, new_dict_part])
+    #     for ts, dict_part in initial_conditioning:
+    #         ts = ts.to(params.device)
+    #         new_dict_part = {k: v.to(params.device) if isinstance(v, torch.Tensor) else v for k, v in dict_part.items()}
+    #         conditioning.append([ts, new_dict_part])
 
     garment_img = load_image(garment_url)
-    clip_vis_tensor = run_clip(garment_img, REPO_CLIP).to(params.device)
-    clip_vis_output = CLIPOutputWrapper(clip_vis_tensor)
-    style_model = load_style_model(REPO_REDUX)
-    style_model.model = style_model.model.to(params.device)
-    styled_conds, = apply_stylemodel(conditioning, style_model, clip_vis_output, params.redux_strength, params.redux_strength_type)
+    # clip_vis_tensor = run_clip(garment_img, REPO_CLIP).to(params.device)
+    # clip_vis_output = CLIPOutputWrapper(clip_vis_tensor)
+    # style_model = load_style_model(REPO_REDUX)
+    # style_model.model = style_model.model.to(params.device)
+    # styled_conds, = apply_stylemodel(conditioning, style_model, clip_vis_output, params.redux_strength, params.redux_strength_type)
 
-    negative_conds, = zero_out(styled_conds)
-    positive_conds, = apply_flux_guidance(styled_conds, params.flux_guidance)
+    # negative_conds, = zero_out(styled_conds)
+    # positive_conds, = apply_flux_guidance(styled_conds, params.flux_guidance)
     
-    prompt_embeds, pooled_prompt_embeds = prepare_embeddings_for_diffusers(
-        positive_conds, negative_conds, params.dtype, params.device
-    )
-    print(f"Custom Embeddings : {prompt_embeds.size()}")
+    # prompt_embeds, pooled_prompt_embeds = prepare_embeddings_for_diffusers(
+    #     positive_conds, negative_conds, params.dtype, params.device
+    # )
+    # print(f"Custom Embeddings : {prompt_embeds.size()}")
 
     # main pipe starts
     pipe_redux = FluxPriorReduxPipeline.from_pretrained(REPO_REDUX_HF, torch_dtype = params.dtype).to(params.device)
     pipe_prior_output = pipe_redux(
         garment_img,
-        prompt_embeds= prompt_embeds,
-        pooled_prompt_embeds= pooled_prompt_embeds,
+        # prompt_embeds= prompt_embeds,
+        # pooled_prompt_embeds= pooled_prompt_embeds,
         prompt_embeds_scale= params.redux_strength
     )
 
@@ -125,13 +126,31 @@ def generate(subject_url : str, garment_url : str, params : GenerateConfig):
         cfg = params.CFG,
         **pipe_prior_output,
     ).images[0]
+    
 
+    pixel_space, o_w, inpaint_mask, mm_bbox, logo_images = process_logo(ToTensor()(garment_img), ToTensor()(out))
+
+    pipe_prior_logos = pipe_redux(logo_images)
+
+    new_out = pipe(
+        image = pixel_space,
+        mask_image = inpaint_mask,
+        guidance_scale= params.flux_guidance,
+        num_inference_steps= params.num_steps,
+        strength = 1.,
+        generator = torch.Generator(params.device).manual_seed(params.seed),
+        # joint_attention_kwargs= {"scale" : params.ACE_scale},
+        cfg = params.CFG,
+        **pipe_prior_logos,
+    )
+
+    out = deconcatenation(new_out, new_out, o_w, mm_bbox)
     out.save('output_fill_1.png')
     print("Saved Output")
 
 if __name__ == "__main__":
     params = GenerateConfig(
-        num_steps= 25,
+        num_steps= 5,
         seed = 42,
         sampler = 'euler',
         scheduler= 'simple',
@@ -143,8 +162,8 @@ if __name__ == "__main__":
         dtype = torch.bfloat16,
     )
 
-    subject_url = "https://res.cloudinary.com/dukgi26uv/image/upload/v1759842454/the-nude-v-neck-pointelle-knit-tee-tops-snhkxv_2048x_bfnch4.webp"
-    garment_url = "https://res.cloudinary.com/dukgi26uv/image/upload/v1759842480/Manchester_United_Home_92.94_Shirt_kyajol.webp"
+    subject_url = "https://res.cloudinary.com/dukgi26uv/image/upload/v1754142589/tryon-images/o5s6nngrevxa05iemley.jpg"
+    garment_url = "https://res.cloudinary.com/dukgi26uv/image/upload/v1754141234/tryon-images/wrcx1xhsyvm2bad017h2.webp"
 
     generate(subject_url, garment_url, params)
 

@@ -155,8 +155,9 @@ class PreprocessImage:
 
         # show_tensor(sub_img, 'after resize')
 
-        print(get_segments(subject_url, garment_url))
-        labels_sub = SegmentCategories(**get_segments(subject_url, garment_url))
+        inputs = get_segments(subject_url, garment_url)
+        print(inputs)
+        labels_sub = SegmentCategories(**inputs)
         if labels_sub.upper_clothes or labels_sub.dress:
             labels_sub.lower_neck = True
 
