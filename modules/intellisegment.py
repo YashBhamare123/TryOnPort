@@ -41,7 +41,7 @@ def get_segments(subject_url: str, clothes_url : str):
         lower_neck : bool
 
     completion = client.chat.completions.create(
-        model="meta-llama/llama-4-scout-17b-16e-instruct",
+        model="meta-llama/llama-4-maverick-17b-128e-instruct",
         messages=[
             {
                 "role" : "system",
@@ -67,7 +67,7 @@ def get_segments(subject_url: str, clothes_url : str):
                 "content": [
                     {
                         "type": "text",
-                        "text": "In my previous message was the subject image. This is my clothes/person wearing clothes image. What all will I need to segment in my subject image that was given to you previously?"
+                        "text": "In my previous message was the subject image. This is my garment image. What all will I need to segment in my subject image that was given to you previously?"
                     },
                     {
                         "type": "image_url",

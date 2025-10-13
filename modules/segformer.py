@@ -159,14 +159,14 @@ def create_masks_garment(img: torch.Tensor, labels: FashionLabels) -> torch.Tens
 
 
 if __name__ == "__main__":
-    url = 'https://res.cloudinary.com/dukgi26uv/image/upload/v1754141234/tryon-images/wrcx1xhsyvm2bad017h2.webp'
+    url = 'https://res.cloudinary.com/dukgi26uv/image/upload/v1754143626/tryon-images/v7mzzq0rivocfutzc57e.jpg'
     img = Image.open(requests.get(url, stream = True).raw)
     img = PILToTensor()(img).unsqueeze(0)
     labels = SegmentCategories(upper_clothes= True, pants = True)
     labels_gar = FashionLabels(unlabelled= False)
     mask = create_masks_garment(img, labels_gar)
-    plt.imshow(mask[0][0])
-    plt.show()
+    mask = ToPILImage()(mask[0])
+    mask.save('file.png')
 
 
 

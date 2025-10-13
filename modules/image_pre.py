@@ -155,6 +155,7 @@ class PreprocessImage:
 
         # show_tensor(sub_img, 'after resize')
 
+        print(get_segments(subject_url, garment_url))
         labels_sub = SegmentCategories(**get_segments(subject_url, garment_url))
         if labels_sub.upper_clothes or labels_sub.dress:
             labels_sub.lower_neck = True
@@ -164,10 +165,10 @@ class PreprocessImage:
         sub_mask = create_masks_subject(sub_img, labels_sub)
         gar_mask = create_masks_garment(gar_img, labels_gar)
 
-        sub_crop = crop_mask(sub_img, sub_mask, padding = self.params.crop_padding)
-        gar_crop = crop_mask(gar_img, gar_mask, padding = self.params.crop_padding)
-        sub_img, sub_mask = sub_crop.cropped
-        gar_img, gar_mask = gar_crop.cropped
+        # sub_crop = crop_mask(sub_img, sub_mask, padding = self.params.crop_padding)
+        # gar_crop = crop_mask(gar_img, gar_mask, padding = self.params.crop_padding)
+        # sub_img, sub_mask = sub_crop.cropped
+        # gar_img, gar_mask = gar_crop.cropped
 
         # show_tensor(sub_img, 'After Crop')
         sub_img = resize_image(sub_img, 
@@ -192,7 +193,7 @@ class PreprocessImage:
                                 self.params.resize_mode)
         
         #TODO Replace this with transluent fill
-        gar_img[:, :, (gar_mask == 0.)[0, 0, :, :]] = 0.5
+        gar_img[:, :, (gar_mask == 0.)[0, 0, :, :]] = 1.
         sub_mask = grow_and_blur_mask(sub_mask, self.params.grow_padding)
 
         # show_tensor(gar_img, 'after fill')

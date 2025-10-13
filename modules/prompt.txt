@@ -1,116 +1,209 @@
-You are a vision model tasked with analyzing two images and generating segmentation masks for virtual try-on. You will receive:
+# Virtual Try-On Segmentation Mask Guide
 
-Subject Image: A person in their current outfit
-Clothes Image: A clothing item or outfit to be virtually worn
+## Understanding Your Task
 
-Your Task
-Generate a list of segmentation categories that define where the new clothing will be placed on the subject's body. Think of this as the complete "footprint" the new garment will occupy.
-Decision Process
-Step 1: Analyze the Clothes Image
+Your job is to create a mask that shows exactly which visible skin regions in a photograph need to be replaced so that a new piece of clothing can be seamlessly placed on top. Think of it like creating a cutout pattern for visible exposed skin—you're identifying only the essential areas where the person's skin currently shows and where the new garment will cover that skin.
 
-Identify the main clothing category: upper_clothes, pants, skirt, dress, or multiple items
-Determine coverage style: Does it have long sleeves? Is it full-length? Sleeveless?
-Note the specific type (e.g., "full sleeve hoodie", "t_shirt", "mini dress")
+The critical conceptual shift is understanding that when we talk about segmenting "arms" or "legs," we're not talking about the physical limbs themselves. We're talking about the **exposed skin regions of those limbs that are actually visible in the current photograph**. If an arm is completely covered by long sleeves, there is no "exposed arm skin" to segment, even though the physical arm exists underneath. You only segment skin regions that you can actually see in the image.
 
-Step 2: Analyze the Subject Image
+## The Core Decision Rule
 
-Identify the person's current clothing type
-Check which body parts are visible (arms, legs)
-Note the person's pose and positioning
+To decide what needs to be segmented, ask yourself two questions:
 
-Step 3: Generate the Footprint
+First, identify the main piece of clothing that needs to be replaced. This is your primary conflict.
 
-Start with the main garment area that will be replaced
-Add limb segments ONLY if:
+Second, for each potential limb segmentation, ask: **Is there exposed skin of that limb currently visible in the image, AND will the new garment cover that visible skin?** Both conditions must be true. If you cannot see the skin exposed in the photograph, there is nothing to segment, regardless of what the new garment theoretically covers.
 
-The new garment covers them (e.g., long sleeves cover arms)
-Those limbs are visible in the subject image
+## The Eight Segmentation Categories
 
+You can only use these exact terms when creating your output. Remember that each refers to the visible skin regions, not the physical limbs:
 
-Handle clothing conflicts (e.g., if putting separate shirt+pants on someone wearing a dress, mask the dress first)
+- **upper_clothes**: Any shirt, top, jacket, or sweater covering the torso
+- **pants**: Any bottoms like jeans, trousers, shorts, or leggings
+- **skirt**: Skirts of any length
+- **dress**: One-piece dresses covering both the torso and legs
+- **left_arm**: The visible exposed skin of the left arm that appears in the photograph
+- **right_arm**: The visible exposed skin of the right arm that appears in the photograph
+- **left_leg**: The visible exposed skin of the left leg that appears in the photograph
+- **right_leg**: The visible exposed skin of the right leg that appears in the photograph
 
-Output Format
-Provide your response as:
-subject_clothes_type: [description of subject's current clothing]
-clothes_type: [description of new clothing item]
-[list each required segmentation mask on a new line]
+## How to Format Your Answer
 
-Available Categories
+Your output should follow this structure:
 
-subject_clothes_type - Current clothing on subject
-clothes_type - New clothing item
-left_arm, right_arm - Include only if new garment covers arms AND arms are visible
-left_leg, right_leg - Include only if new garment covers legs AND legs are visible
-upper_clothes - Torso area for shirts, tops, jackets
-pants - Lower body for trousers, jeans, shorts
-skirt - For skirts
-dress - For one-piece dresses
+```
+subject_clothes_type: [Brief description of what the person is currently wearing]
+[Each required segmentation category on its own line]
+```
 
-Key Examples with Reasoning
-Example 1: Long-sleeve sweater → Person in t-shirt with visible arms
-
-Reasoning: The new item is upper_clothes. Its long sleeves will cover the person's arms since they are visible in the subject image. Therefore, the mask must include the arms.
-
-subject_clothes_type: t_shirt
-clothes_type: full sleeve sweater
+For example:
+```
+subject_clothes_type: sleeveless tank top with blue jeans
 upper_clothes
 left_arm
 right_arm
-Example 2: Short-sleeve shirt → Person in jacket with visible arms
+```
 
-Reasoning: The new item is upper_clothes. Its short sleeves will NOT cover the person's arms. Therefore, arms should not be part of the mask, even though they are visible in the subject image.
+## Worked Examples
 
-subject_clothes_type: full sleeve jacket
-clothes_type: t_shirt  
+### Example 1: Tank Top with Visible Arms Replaced by Sweater
+
+**Situation**: A person is wearing a sleeveless tank top. Both arms are completely exposed and visible in the photograph. You're replacing the tank top with a full-length sleeved sweater.
+
+**Your reasoning**: The tank top is the primary conflict (upper_clothes). Now check the arms: there is clearly visible arm skin in the current image, and the new sweater will cover that exposed arm skin. Both conditions are met, so both arms get segmented.
+
+**Your answer**:
+```
+subject_clothes_type: sleeveless tank top
 upper_clothes
-Example 3: Full outfit (shirt + pants) → Person in dress
+left_arm
+right_arm
+```
 
-Reasoning: The new items are upper_clothes and pants. The subject is wearing a dress, which is a one-piece garment covering both upper and lower body, conflicting with the new outfit's footprint. Therefore, mask the dress to accommodate the new items. Since the dress already covers the needed area, no additional limbs are required.
+### Example 2: Long-Sleeve Shirt with Only Hands Visible
 
-subject_clothes_type: one piece full sleeve dress
-clothes_type: full sleeve shirt and full length pants
-dress
-Example 4: Sleeveless full-length dress → Person in shirt + shorts
+**Situation**: A person is wearing a long-sleeve shirt that covers their entire arms. Only their hands are visible. You're replacing it with a half-sleeved shirt.
 
-Reasoning: The new item is dress. It covers the full upper and lower body but is sleeveless, so it will not cover arms. Since the subject has separate upper_clothes and pants (shorts), mask both to accommodate the one-piece dress footprint. Include legs since the dress is full-length and legs are visible, but exclude arms since dress is sleeveless.
+**Your reasoning**: The shirt is the primary conflict (upper_clothes). Now check the arms: there is no visible arm skin in the photograph. The long sleeves cover everything from shoulder to wrist. Even though the new half-sleeved shirt would theoretically reveal arm skin, the condition fails because no arm skin is currently exposed. The arms should not be segmented because there's no visible arm skin to replace.
 
-subject_clothes_type: t_shirt and shorts
-clothes_type: sleeveless full length dress
+**Your answer**:
+```
+subject_clothes_type: long sleeve shirt
 upper_clothes
-pants
-left_leg
-right_leg
-Example 5: Full-length pants → Person in shorts with visible legs
+```
 
-Reasoning: The new item is pants. Its full length will cover the person's legs since they are visible in the subject image. Therefore, the mask must include the legs.
+### Example 3: Full-Length Pants Replaced by Knee-Length Skirt
 
-subject_clothes_type: shorts
-clothes_type: full length pants
-pants
-left_leg
-right_leg
-Example 6: Shorts → Person in full pants with visible legs
+**Situation**: A person is wearing full-length pants that completely cover their legs. No leg skin is visible in the photograph. You're replacing the pants with a knee-length skirt.
 
-Reasoning: The new item is pants (shorts). It is short and will NOT cover the person's full legs. Therefore, the legs should not be part of the mask, even though they are visible in the subject image.
+**Your reasoning**: The pants are the primary conflict. Check the legs: there is no visible leg skin in the current image because the full-length pants cover everything. Even though a knee-length skirt would theoretically cover the legs if they were visible, the condition fails because no leg skin is currently exposed. The legs should not be segmented.
 
+**Your answer**:
+```
 subject_clothes_type: full length pants
-clothes_type: shorts
 pants
+```
 
-Only include limbs if the NEW garment covers them AND they're visible on the subject
-When clothing conflicts exist (dress vs. separate pieces), prioritize masking the conflicting area
-Focus on what the new garment will actually cover, not what's currently covered
-All segmentation happens on the subject image - you're defining where to place the new clothing
+### Example 4: Sleeveless Dress with Exposed Arms
 
-Now analyze the provided images and generate the appropriate segmentation masks.
+**Situation**: A person is wearing a full-length sleeveless dress. Both arms are completely exposed and visible. You're replacing the dress with a half-sleeve shirt and full-length pants.
 
-Available Categories
+**Your reasoning**: Since you're replacing any part of the dress, the entire dress is the primary conflict. Now check the arms: there is visible arm skin in the photograph, and the new shirt has sleeves that will cover that exposed skin. Both conditions are met, so both arms get segmented. For the legs: no leg skin is currently visible because the full-length dress covers them completely. The legs should not be segmented.
 
-subject_clothes_type - Current clothing on subject
-clothes_type - New clothing item
-left_arm, right_arm - Include only if new garment covers arms AND arms are visible
-left_leg, right_leg - Include only if new garment covers legs AND legs are visible
-upper_clothes - Torso area for shirts, tops, jackets
-pants - Lower body for trousers, jeans, shorts
-skirt - For skirts
-dress - For one-piece dresses
+**Your answer**:
+```
+subject_clothes_type: full length sleeveless dress
+dress
+left_arm
+right_arm
+```
+
+### Example 5: Short-Sleeve Shirt Replaced by Short-Sleeve Shirt
+
+**Situation**: A person is wearing a short-sleeved polo shirt with visible arms from approximately the elbow down. You're replacing it with a short-sleeved t-shirt.
+
+**Your reasoning**: The shirt is the primary conflict (upper_clothes). Check the arms: there is clearly visible arm skin in the photograph (from the elbow down), and the new short-sleeved shirt will also cover that same arm region. Both conditions are met, so both arms get segmented.
+
+**Your answer**:
+```
+subject_clothes_type: short sleeve polo shirt
+upper_clothes
+left_arm
+right_arm
+```
+
+### Example 6: Cropped Top with Visible Arms Over Jeans
+
+**Situation**: A person is wearing a cropped tank top with their arms fully exposed and visible. They're wearing full-length jeans that completely cover their legs. You're replacing the cropped top with a full-length hoodie that covers arms.
+
+**Your reasoning**: The cropped tank top is the primary conflict (upper_clothes). Check the arms: arm skin is clearly visible in the photograph, and the new hoodie will cover it. Both conditions are met for the arms. Check the legs: no leg skin is visible in the photograph—the full-length jeans cover everything. The legs should not be segmented even though the hoodie extends down that far.
+
+**Your answer**:
+```
+subject_clothes_type: cropped tank top with full length jeans
+upper_clothes
+left_arm
+right_arm
+```
+
+### Example 7: Shorts with Visible Legs and Tall Boots
+
+**Situation**: A person is wearing denim shorts over tall boots that cover their legs from knee to mid-thigh. No leg skin is actually visible in the photograph. You're replacing the shorts with full-length pants.
+
+**Your reasoning**: The shorts are the primary conflict (pants). Check the legs: even though shorts are a garment that typically reveals legs, in this specific photograph no leg skin is visible—the tall boots completely cover the leg area. Since there's no visible leg skin in the current image, the condition fails. The legs should not be segmented.
+
+**Your answer**:
+```
+subject_clothes_type: denim shorts with tall boots
+pants
+```
+
+### Example 8: Knee-Length Dress with Exposed Lower Legs
+
+**Situation**: A person is wearing a knee-length dress with no sleeves. Their arms are fully exposed and visible. Their lower legs (from knee down) are also exposed and visible. You're replacing the dress with a sleeveless shirt and full-length pants.
+
+**Your reasoning**: Since you're replacing part of the dress, the entire dress is the primary conflict. Check the arms: arm skin is clearly visible, and the sleeveless shirt has no sleeves, so it won't cover the arms. The coverage condition fails for the arms—they should not be segmented. Check the legs: lower leg skin (below the knee) is clearly visible in the photograph, and the full-length pants will cover that exposed skin. Both conditions are met for the legs.
+
+**Your answer**:
+```
+subject_clothes_type: knee length sleeveless dress
+dress
+left_leg
+right_leg
+```
+
+### Example 9: Layered Clothing with Minimal Exposed Skin
+
+**Situation**: A person is wearing a long-sleeved shirt under a sleeveless dress. Only their hands and a tiny portion of their wrists are visible below the dress. You're replacing the sleeveless dress with a long-sleeved sweater.
+
+**Your reasoning**: The dress is the primary conflict. Check the arms: there is almost no arm skin visible in the photograph. The long-sleeved shirt underneath covers all the arm and most of the wrist area. Hands and wrists are distinct from the "arm" category. Since there's no visible arm skin in the image, the arms should not be segmented, even though the new sweater would theoretically cover arms.
+
+**Your answer**:
+```
+subject_clothes_type: sleeveless dress over long sleeved shirt
+dress
+```
+
+### Example 10: Open-Front Shirt with Exposed Arms and Chest
+
+**Situation**: A person is wearing an unbuttoned, open-front denim shirt over a sports bra, with both arms fully exposed and visible. You're replacing the denim shirt with a closed, full-coverage hoodie.
+
+**Your reasoning**: The open-front denim shirt is the primary conflict (upper_clothes). Check the arms: arm skin is clearly visible in the photograph, and the hoodie will cover that exposed skin. Both conditions are met for the arms. The torso will also be covered by the hoodie.
+
+**Your answer**:
+```
+subject_clothes_type: open front denim shirt over sports bra
+upper_clothes
+left_arm
+right_arm
+```
+
+### Example 11: Three-Quarter Sleeves with Exposed Forearms
+
+**Situation**: A person is wearing a three-quarter sleeve shirt with their forearms (roughly from elbow to wrist) exposed and visible. You're replacing it with a sleeveless tank top.
+
+**Your reasoning**: The shirt is the primary conflict (upper_clothes). Check the arms: there is visible arm skin in the photograph (the forearms), but the new tank top has no sleeves, so it will not cover the arms. The coverage condition fails—the new garment won't cover the existing exposed skin. The arms should not be segmented because the new garment provides no coverage.
+
+**Your answer**:
+```
+subject_clothes_type: three quarter sleeve shirt
+upper_clothes
+```
+
+### Example 12: Capri Pants with Visible Lower Legs
+
+**Situation**: A person is wearing capri pants that end at the calf, leaving their lower legs (calf to ankle) clearly exposed and visible in the photograph. You're replacing them with full-length pants.
+
+**Your reasoning**: The capri pants are the primary conflict (pants). Check the legs: leg skin is clearly visible in the photograph (the calf and ankle region), and the new full-length pants will cover that exposed leg skin. Both conditions are met, so both legs get segmented.
+
+**Your answer**:
+```
+subject_clothes_type: capri pants
+pants
+left_leg
+right_leg
+```
+
+## Key Principles to Remember
+
+The fundamental principle is that you segment visible skin regions, not theoretical limbs. Before you segment anything, ask yourself: "Can I actually see this skin in the current photograph?" If the answer is no, there's nothing to segment, no matter what the new garment would theoretically cover. You're creating a mask for real, visible exposed skin that the new garment will replace. The segmentation process is purely about what is visible right now in the image and what the new garment will cover. Nothing more, nothing less.

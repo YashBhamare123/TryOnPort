@@ -73,8 +73,8 @@ def generate(subject_url : str, garment_url : str, params : GenerateConfig):
     pipe_prior_output = pipe_redux(
         garment_img,
         prompt_embeds= prompt_embeds,
-        pooled_prompt_embeds= pooled_prompt_embeds
-
+        pooled_prompt_embeds= pooled_prompt_embeds,
+        prompt_embeds_scale= params.redux_strength
     )
 
     prompt_embeds = pipe_prior_output.prompt_embeds
@@ -93,7 +93,10 @@ def generate(subject_url : str, garment_url : str, params : GenerateConfig):
 
     
     print(f"Flux Embeddings Format :{pipe_prior_output.prompt_embeds.size()}")
+
+    sampler = FlowMatchEulerDiscreteScheduler()
     pipe = FluxFillPipeline.from_pretrained(REPO_FLUX, torch_dtype = params.dtype).to(params.device)
+    pipe.scheduler = sampler
     # pipe.load_lora_weights(REPO_ACE, subfolder = REPO_ACE_SUB, filename = ACE_NAME)
     processor_config = PreprocessConfig(
         resized_height= 1024,
@@ -105,21 +108,22 @@ def generate(subject_url : str, garment_url : str, params : GenerateConfig):
     pil_mask = ToPILImage()(mask[0])
     pil_image.save('subject_image.png')
     pil_mask.save('mask_image.png')
-
+    W, H = pil_image.size
     image = image.to(device = params.device, dtype = params.dtype)
     mask = mask.to(device = params.device, dtype = params.dtype)
 
     out = pipe(
         image = image,
         mask_image = mask,
-        # prompt_embeds= prompt_embeds,
-        # pooled_prompt_embeds= pooled_prompt_embeds,
-        guidance_scale= 40,
+        guidance_scale= params.flux_guidance,
         num_inference_steps= params.num_steps,
         strength = 1.,
         generator = torch.Generator(params.device).manual_seed(params.seed),
+        height = H,
+        width = W,
         # joint_attention_kwargs= {"scale" : params.ACE_scale},
-        **pipe_prior_output
+        cfg = params.CFG,
+        **pipe_prior_output,
     ).images[0]
 
     out.save('output_fill_1.png')
@@ -127,13 +131,13 @@ def generate(subject_url : str, garment_url : str, params : GenerateConfig):
 
 if __name__ == "__main__":
     params = GenerateConfig(
-        num_steps= 30,
+        num_steps= 25,
         seed = 42,
         sampler = 'euler',
         scheduler= 'simple',
-        flux_guidance = 50,
-        CFG = 0.8,
-        redux_strength= 1.50,
+        flux_guidance = 30,
+        CFG = 1.,
+        redux_strength= 0.4,
         redux_strength_type= "multiply",
         ACE_scale= 0.,
         dtype = torch.bfloat16,
