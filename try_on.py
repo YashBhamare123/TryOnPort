@@ -177,7 +177,7 @@ def main():
         if "__pycache__" in py_file or "/." in py_file or py_file.startswith("."):
             continue
             
-        with open(py_file, "r") as f:
+        with open(py_file, "r", encoding="utf-8") as f:
             files[py_file] = f.read()
         print(f"Including {py_file}")
     

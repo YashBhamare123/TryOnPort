@@ -11,7 +11,7 @@ from sampling.utils import zero_out, apply_flux_guidance
 from sampling.apply_clip import run_clip
 from sampling.apply_style import load_style_model, apply_stylemodel, CLIPOutputWrapper
 from sampling.config import GenerateConfig
-from logo.detector import process_logo, deconcatenation
+from Logo.detector import process_logo, deconcatenation
 
 
 def prepare_embeddings_for_diffusers(positive_conds, negative_conds, dtype, device):
