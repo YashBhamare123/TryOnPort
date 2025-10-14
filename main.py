@@ -71,6 +71,9 @@ def generate(subject_url : str, garment_url : str, params : GenerateConfig):
 
     # main pipe starts
     pipe_redux = FluxPriorReduxPipeline.from_pretrained(REPO_REDUX_HF, torch_dtype = params.dtype).to(params.device)
+    sampler = FlowMatchEulerDiscreteScheduler()
+    pipe = FluxFillPipeline.from_pretrained(REPO_FLUX, torch_dtype = params.dtype).to(params.device)
+
     pipe_prior_output = pipe_redux(
         garment_img,
         # prompt_embeds= prompt_embeds,
@@ -95,8 +98,7 @@ def generate(subject_url : str, garment_url : str, params : GenerateConfig):
     
     print(f"Flux Embeddings Format :{pipe_prior_output.prompt_embeds.size()}")
 
-    sampler = FlowMatchEulerDiscreteScheduler()
-    pipe = FluxFillPipeline.from_pretrained(REPO_FLUX, torch_dtype = params.dtype).to(params.device)
+    
     pipe.scheduler = sampler
     # pipe.load_lora_weights(REPO_ACE, subfolder = REPO_ACE_SUB, filename = ACE_NAME)
     processor_config = PreprocessConfig(
@@ -128,23 +130,23 @@ def generate(subject_url : str, garment_url : str, params : GenerateConfig):
     ).images[0]
     
 
-    pixel_space, o_w, inpaint_mask, mm_bbox, logo_images = process_logo(ToTensor()(garment_img), ToTensor()(out))
+    # pixel_space, o_w, inpaint_mask, mm_bbox, logo_images = process_logo(ToTensor()(garment_img), ToTensor()(out))
 
-    pipe_prior_logos = pipe_redux(logo_images)
+    # pipe_prior_logos = pipe_redux(logo_images)
 
-    new_out = pipe(
-        image = pixel_space,
-        mask_image = inpaint_mask,
-        guidance_scale= params.flux_guidance,
-        num_inference_steps= params.num_steps,
-        strength = 1.,
-        generator = torch.Generator(params.device).manual_seed(params.seed),
-        # joint_attention_kwargs= {"scale" : params.ACE_scale},
-        cfg = params.CFG,
-        **pipe_prior_logos,
-    )
+    # new_out = pipe(
+    #     image = pixel_space,
+    #     mask_image = inpaint_mask,
+    #     guidance_scale= params.flux_guidance,
+    #     num_inference_steps= params.num_steps,
+    #     strength = 1.,
+    #     generator = torch.Generator(params.device).manual_seed(params.seed),
+    #     # joint_attention_kwargs= {"scale" : params.ACE_scale},
+    #     cfg = params.CFG,
+    #     **pipe_prior_logos,
+    # )
 
-    out = deconcatenation(new_out, new_out, o_w, mm_bbox)
+    # out = deconcatenation(new_out, new_out, o_w, mm_bbox)
     out.save('output_fill_1.png')
     print("Saved Output")
 

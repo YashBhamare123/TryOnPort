@@ -113,6 +113,8 @@ def run_tryon(files: dict):
     os.environ["HF_HUB_CACHE"] = "/cache"
     os.environ["HF_ENABLE_PARALLEL_SHARD_DOWNLOAD"] = "1"
     
+    os.makedirs("/cache/compile", exist_ok=True)
+    
     for filename, content in files.items():
         print(f"Writing {filename}...")
         
@@ -150,7 +152,7 @@ def run_tryon(files: dict):
     garment_url = "https://res.cloudinary.com/dukgi26uv/image/upload/v1754143563/tryon-images/l4gx7uzvdz0ac6jqkrgn.webp"
 
     generate(subject_url, garment_url, params)
-    
+    volume.commit()
     image_list = []
     with open("output_fill_1.png", "rb") as f:
         image_list.append(f.read())

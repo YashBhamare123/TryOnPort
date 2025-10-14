@@ -1,209 +1,964 @@
-# Virtual Try-On Segmentation Mask Guide
-
-## Understanding Your Task
-
-Your job is to create a mask that shows exactly which visible skin regions in a photograph need to be replaced so that a new piece of clothing can be seamlessly placed on top. Think of it like creating a cutout pattern for visible exposed skin—you're identifying only the essential areas where the person's skin currently shows and where the new garment will cover that skin.
-
-The critical conceptual shift is understanding that when we talk about segmenting "arms" or "legs," we're not talking about the physical limbs themselves. We're talking about the **exposed skin regions of those limbs that are actually visible in the current photograph**. If an arm is completely covered by long sleeves, there is no "exposed arm skin" to segment, even though the physical arm exists underneath. You only segment skin regions that you can actually see in the image.
-
-## The Core Decision Rule
-
-To decide what needs to be segmented, ask yourself two questions:
-
-First, identify the main piece of clothing that needs to be replaced. This is your primary conflict.
-
-Second, for each potential limb segmentation, ask: **Is there exposed skin of that limb currently visible in the image, AND will the new garment cover that visible skin?** Both conditions must be true. If you cannot see the skin exposed in the photograph, there is nothing to segment, regardless of what the new garment theoretically covers.
-
-## The Eight Segmentation Categories
-
-You can only use these exact terms when creating your output. Remember that each refers to the visible skin regions, not the physical limbs:
-
-- **upper_clothes**: Any shirt, top, jacket, or sweater covering the torso
-- **pants**: Any bottoms like jeans, trousers, shorts, or leggings
-- **skirt**: Skirts of any length
-- **dress**: One-piece dresses covering both the torso and legs
-- **left_arm**: The visible exposed skin of the left arm that appears in the photograph
-- **right_arm**: The visible exposed skin of the right arm that appears in the photograph
-- **left_leg**: The visible exposed skin of the left leg that appears in the photograph
-- **right_leg**: The visible exposed skin of the right leg that appears in the photograph
-
-## How to Format Your Answer
-
-Your output should follow this structure:
-
-```
-subject_clothes_type: [Brief description of what the person is currently wearing]
-[Each required segmentation category on its own line]
-```
-
-For example:
-```
-subject_clothes_type: sleeveless tank top with blue jeans
-upper_clothes
-left_arm
-right_arm
-```
-
-## Worked Examples
-
-### Example 1: Tank Top with Visible Arms Replaced by Sweater
-
-**Situation**: A person is wearing a sleeveless tank top. Both arms are completely exposed and visible in the photograph. You're replacing the tank top with a full-length sleeved sweater.
-
-**Your reasoning**: The tank top is the primary conflict (upper_clothes). Now check the arms: there is clearly visible arm skin in the current image, and the new sweater will cover that exposed arm skin. Both conditions are met, so both arms get segmented.
-
-**Your answer**:
-```
-subject_clothes_type: sleeveless tank top
-upper_clothes
-left_arm
-right_arm
-```
-
-### Example 2: Long-Sleeve Shirt with Only Hands Visible
-
-**Situation**: A person is wearing a long-sleeve shirt that covers their entire arms. Only their hands are visible. You're replacing it with a half-sleeved shirt.
-
-**Your reasoning**: The shirt is the primary conflict (upper_clothes). Now check the arms: there is no visible arm skin in the photograph. The long sleeves cover everything from shoulder to wrist. Even though the new half-sleeved shirt would theoretically reveal arm skin, the condition fails because no arm skin is currently exposed. The arms should not be segmented because there's no visible arm skin to replace.
-
-**Your answer**:
-```
-subject_clothes_type: long sleeve shirt
-upper_clothes
-```
-
-### Example 3: Full-Length Pants Replaced by Knee-Length Skirt
-
-**Situation**: A person is wearing full-length pants that completely cover their legs. No leg skin is visible in the photograph. You're replacing the pants with a knee-length skirt.
-
-**Your reasoning**: The pants are the primary conflict. Check the legs: there is no visible leg skin in the current image because the full-length pants cover everything. Even though a knee-length skirt would theoretically cover the legs if they were visible, the condition fails because no leg skin is currently exposed. The legs should not be segmented.
-
-**Your answer**:
-```
-subject_clothes_type: full length pants
-pants
-```
-
-### Example 4: Sleeveless Dress with Exposed Arms
-
-**Situation**: A person is wearing a full-length sleeveless dress. Both arms are completely exposed and visible. You're replacing the dress with a half-sleeve shirt and full-length pants.
-
-**Your reasoning**: Since you're replacing any part of the dress, the entire dress is the primary conflict. Now check the arms: there is visible arm skin in the photograph, and the new shirt has sleeves that will cover that exposed skin. Both conditions are met, so both arms get segmented. For the legs: no leg skin is currently visible because the full-length dress covers them completely. The legs should not be segmented.
-
-**Your answer**:
-```
-subject_clothes_type: full length sleeveless dress
-dress
-left_arm
-right_arm
-```
-
-### Example 5: Short-Sleeve Shirt Replaced by Short-Sleeve Shirt
-
-**Situation**: A person is wearing a short-sleeved polo shirt with visible arms from approximately the elbow down. You're replacing it with a short-sleeved t-shirt.
-
-**Your reasoning**: The shirt is the primary conflict (upper_clothes). Check the arms: there is clearly visible arm skin in the photograph (from the elbow down), and the new short-sleeved shirt will also cover that same arm region. Both conditions are met, so both arms get segmented.
-
-**Your answer**:
-```
-subject_clothes_type: short sleeve polo shirt
-upper_clothes
-left_arm
-right_arm
-```
-
-### Example 6: Cropped Top with Visible Arms Over Jeans
-
-**Situation**: A person is wearing a cropped tank top with their arms fully exposed and visible. They're wearing full-length jeans that completely cover their legs. You're replacing the cropped top with a full-length hoodie that covers arms.
-
-**Your reasoning**: The cropped tank top is the primary conflict (upper_clothes). Check the arms: arm skin is clearly visible in the photograph, and the new hoodie will cover it. Both conditions are met for the arms. Check the legs: no leg skin is visible in the photograph—the full-length jeans cover everything. The legs should not be segmented even though the hoodie extends down that far.
-
-**Your answer**:
-```
-subject_clothes_type: cropped tank top with full length jeans
-upper_clothes
-left_arm
-right_arm
-```
-
-### Example 7: Shorts with Visible Legs and Tall Boots
-
-**Situation**: A person is wearing denim shorts over tall boots that cover their legs from knee to mid-thigh. No leg skin is actually visible in the photograph. You're replacing the shorts with full-length pants.
-
-**Your reasoning**: The shorts are the primary conflict (pants). Check the legs: even though shorts are a garment that typically reveals legs, in this specific photograph no leg skin is visible—the tall boots completely cover the leg area. Since there's no visible leg skin in the current image, the condition fails. The legs should not be segmented.
-
-**Your answer**:
-```
-subject_clothes_type: denim shorts with tall boots
-pants
-```
-
-### Example 8: Knee-Length Dress with Exposed Lower Legs
-
-**Situation**: A person is wearing a knee-length dress with no sleeves. Their arms are fully exposed and visible. Their lower legs (from knee down) are also exposed and visible. You're replacing the dress with a sleeveless shirt and full-length pants.
-
-**Your reasoning**: Since you're replacing part of the dress, the entire dress is the primary conflict. Check the arms: arm skin is clearly visible, and the sleeveless shirt has no sleeves, so it won't cover the arms. The coverage condition fails for the arms—they should not be segmented. Check the legs: lower leg skin (below the knee) is clearly visible in the photograph, and the full-length pants will cover that exposed skin. Both conditions are met for the legs.
-
-**Your answer**:
-```
-subject_clothes_type: knee length sleeveless dress
-dress
-left_leg
-right_leg
-```
-
-### Example 9: Layered Clothing with Minimal Exposed Skin
-
-**Situation**: A person is wearing a long-sleeved shirt under a sleeveless dress. Only their hands and a tiny portion of their wrists are visible below the dress. You're replacing the sleeveless dress with a long-sleeved sweater.
-
-**Your reasoning**: The dress is the primary conflict. Check the arms: there is almost no arm skin visible in the photograph. The long-sleeved shirt underneath covers all the arm and most of the wrist area. Hands and wrists are distinct from the "arm" category. Since there's no visible arm skin in the image, the arms should not be segmented, even though the new sweater would theoretically cover arms.
-
-**Your answer**:
-```
-subject_clothes_type: sleeveless dress over long sleeved shirt
-dress
-```
-
-### Example 10: Open-Front Shirt with Exposed Arms and Chest
-
-**Situation**: A person is wearing an unbuttoned, open-front denim shirt over a sports bra, with both arms fully exposed and visible. You're replacing the denim shirt with a closed, full-coverage hoodie.
-
-**Your reasoning**: The open-front denim shirt is the primary conflict (upper_clothes). Check the arms: arm skin is clearly visible in the photograph, and the hoodie will cover that exposed skin. Both conditions are met for the arms. The torso will also be covered by the hoodie.
-
-**Your answer**:
-```
-subject_clothes_type: open front denim shirt over sports bra
-upper_clothes
-left_arm
-right_arm
-```
-
-### Example 11: Three-Quarter Sleeves with Exposed Forearms
-
-**Situation**: A person is wearing a three-quarter sleeve shirt with their forearms (roughly from elbow to wrist) exposed and visible. You're replacing it with a sleeveless tank top.
-
-**Your reasoning**: The shirt is the primary conflict (upper_clothes). Check the arms: there is visible arm skin in the photograph (the forearms), but the new tank top has no sleeves, so it will not cover the arms. The coverage condition fails—the new garment won't cover the existing exposed skin. The arms should not be segmented because the new garment provides no coverage.
-
-**Your answer**:
-```
-subject_clothes_type: three quarter sleeve shirt
-upper_clothes
-```
-
-### Example 12: Capri Pants with Visible Lower Legs
-
-**Situation**: A person is wearing capri pants that end at the calf, leaving their lower legs (calf to ankle) clearly exposed and visible in the photograph. You're replacing them with full-length pants.
-
-**Your reasoning**: The capri pants are the primary conflict (pants). Check the legs: leg skin is clearly visible in the photograph (the calf and ankle region), and the new full-length pants will cover that exposed leg skin. Both conditions are met, so both legs get segmented.
-
-**Your answer**:
-```
-subject_clothes_type: capri pants
-pants
-left_leg
-right_leg
-```
-
-## Key Principles to Remember
-
-The fundamental principle is that you segment visible skin regions, not theoretical limbs. Before you segment anything, ask yourself: "Can I actually see this skin in the current photograph?" If the answer is no, there's nothing to segment, no matter what the new garment would theoretically cover. You're creating a mask for real, visible exposed skin that the new garment will replace. The segmentation process is purely about what is visible right now in the image and what the new garment will cover. Nothing more, nothing less.
+VIRTUAL TRY-ON SEGMENTATION ANALYSIS SYSTEM - EXPOSED SKIN COMPARISON
+
+=============================================================================
+CORE CONCEPT: WHEN TO SEGMENT EXPOSED ARM AND LEG SKIN
+=============================================================================
+
+The ONLY condition when left_arm, right_arm, left_leg, and right_leg should be TRUE:
+
+  The NEW GARMENT exposes LESS skin and covers MORE skin with cloth
+  COMPARED TO what the SUBJECT is currently wearing.
+
+  In simpler terms:
+    • Subject wears garment with A amount of exposed skin
+    • New garment covers the limb more, exposing B amount of skin
+    • If B < A (new exposes less, covers more)
+      → limb boolean = TRUE
+    • If B >= A (same exposure or new exposes more)
+      → limb boolean = FALSE
+
+  ADDITIONAL CONDITION:
+    • If the type of dress (e.g., sleeve/pant length, style) is similar for both 
+      the subject image and the garment cloth image, then the corresponding limb 
+      booleans MUST be FALSE, regardless of exposed skin comparison.
+
+=============================================================================
+ARM SKIN EXPOSURE LOGIC
+=============================================================================
+
+DEFINITION:
+  Exposed arm skin = the VISIBLE SKIN on the arm that is NOT covered by garment cloth.
+
+CRITICAL RULE:
+  Set left_arm and right_arm to TRUE ONLY IF:
+    New garment covers arm MORE (exposes LESS skin)
+    than the subject's current garment
+
+  Set to FALSE for ALL other cases:
+    • New garment covers SAME amount of arm
+    • New garment covers LESS (exposes more arm)
+    • Any case where new garment doesn't reduce exposed skin
+    • If dress type is similar for subject and new garment (e.g., both are 
+      short-sleeve shirts, both are long-sleeve hoodies, etc.)
+
+IMPORTANT CLARIFICATION:
+  This is NOT about whether something is covered or exposed in absolute terms.
+  This is a COMPARISON between subject and new garment.
+  If the type of dress is similar, arm booleans are always FALSE.
+
+  Example that shows the KEY CONCEPT:
+    • Subject: Short-sleeve t-shirt (forearm exposed, 40% of arm exposed)
+    • New: Light blue long-sleeve hoodie (wrist covered, 10% of arm exposed)
+    • Comparison: Does new cover MORE? YES (40% > 10%)
+    • Result: left_arm = TRUE ✓
+    
+    BUT ALSO:
+    • Subject: Short-sleeve t-shirt (forearm exposed, 40% of arm exposed)
+    • New: Another short-sleeve t-shirt (forearm exposed, 40% of arm exposed)
+    • Comparison: Dress type is similar (both short-sleeve t-shirts)
+    • Result: left_arm = FALSE ✗
+
+=============================================================================
+ARM EXPOSURE MEASUREMENT
+=============================================================================
+
+To determine if new garment covers MORE arm, measure these points:
+
+VISUAL REFERENCE POINTS on the arm:
+  0. Fingertips/Knuckles = 0% arm exposed (100% skin covered, full sleeve)
+  1. Mid-hand = 10% arm exposed (90% skin covered, full sleeve with fold near wrist)
+  2. Wrist = 15% arm exposed (85% skin covered)
+  3. Mid-forearm = 35% arm exposed (65% skin covered)
+  4. Elbow = 50% arm exposed (50% skin covered, t-shirt with bigger sleeve)
+  5. Mid-upper-arm = 75% arm exposed (25% skin covered, t-shirt)
+  6. Shoulder = 100% arm exposed (0% skin covered, sleeveless)
+
+MEASUREMENT PROCESS:
+
+  STEP 1: In SUBJECT IMAGE, identify:
+    "Where does the cloth of the subject's garment END?"
+    Match to reference point: ends at _____ (wrist? elbow? mid-forearm?)
+    Estimate exposed skin: ___% (how much skin shows from cloth edge to fingertips?)
+
+  STEP 2: In NEW GARMENT IMAGE, identify:
+    "Where does the cloth of the new garment END?"
+    Match to reference point: ends at _____ (wrist? elbow? mid-forearm?)
+    Estimate exposed skin: ___% (how much skin would show from cloth edge to fingertips?)
+
+  STEP 3: COMPARE the two exposed skin percentages:
+    Subject exposed skin: ___%
+    New garment exposed skin: ___%
+    
+    Is new garment exposed skin LESS than subject exposed skin?
+      If YES → left_arm = TRUE, right_arm = TRUE ✓
+      If NO → left_arm = FALSE, right_arm = FALSE
+
+  STEP 4: CHECK DRESS TYPE SIMILARITY:
+    If the type of dress is similar for both subject and new garment,
+    then left_arm = FALSE, right_arm = FALSE regardless of skin exposure.
+
+=============================================================================
+LEG SKIN EXPOSURE LOGIC
+=============================================================================
+
+DEFINITION:
+  Exposed leg skin = the VISIBLE SKIN on the leg that is NOT covered by garment cloth.
+
+CRITICAL RULE:
+  Set left_leg and right_leg to TRUE ONLY IF:
+    New garment covers leg MORE (exposes LESS skin)
+    than the subject's current garment
+
+  Set to FALSE for ALL other cases:
+    • New garment covers SAME amount of leg
+    • New garment covers LESS (exposes more leg)
+    • Any case where new garment doesn't reduce exposed skin
+    • If pant/skirt/dress type is similar for subject and new garment 
+      (e.g., both are shorts, both are full-length pants, both are midi skirts, etc.)
+
+IMPORTANT CLARIFICATION:
+  This is NOT about whether legs are covered or exposed in absolute terms.
+  This is a COMPARISON between subject and new garment.
+  If the type of lower garment is similar, leg booleans are always FALSE.
+
+  Example that shows the KEY CONCEPT:
+    • Subject: Shorts (thigh and calf exposed, 60% of leg exposed)
+    • New: Full-length pants (ankles covered, 5% of leg exposed)
+    • Comparison: Does new cover MORE? YES (60% > 5%)
+    • Result: left_leg = TRUE, right_leg = TRUE ✓
+    
+    BUT ALSO:
+    • Subject: Full-length jeans (ankles covered, 5% of leg exposed)
+    • New: Full-length dress pants (ankles covered, 5% of leg exposed)
+    • Comparison: Pant type is similar (both full-length pants)
+    • Result: left_leg = FALSE ✗
+
+=============================================================================
+LEG EXPOSURE MEASUREMENT
+=============================================================================
+
+To determine if new garment covers MORE leg, measure these points:
+
+VISUAL REFERENCE POINTS on the leg:
+  0. Toes = 0% leg exposed (100% skin covered, full-length with socks)
+  1. Ankle = 5% leg exposed (95% skin covered, full-length pants)
+  2. Mid-calf = 25% leg exposed (75% skin covered, capri pants)
+  3. Knee = 50% leg exposed (50% skin covered, knee-length shorts/skirt)
+  4. Mid-thigh = 70% leg exposed (30% skin covered, short shorts/mini skirt)
+  5. Upper-thigh = 90% leg exposed (10% skin covered, very short shorts)
+  6. Hip = 100% leg exposed (0% skin covered, swimwear)
+
+MEASUREMENT PROCESS:
+
+  STEP 1: In SUBJECT IMAGE, identify:
+    "Where does the cloth of the subject's lower garment END?"
+    Match to reference point: ends at _____ (ankle? knee? mid-thigh?)
+    Estimate exposed skin: ___% (how much skin shows from cloth edge to toes?)
+
+  STEP 2: In NEW GARMENT IMAGE, identify:
+    "Where does the cloth of the new garment END?"
+    Match to reference point: ends at _____ (ankle? knee? mid-thigh?)
+    Estimate exposed skin: ___% (how much skin would show from cloth edge to toes?)
+
+  STEP 3: COMPARE the two exposed skin percentages:
+    Subject exposed leg skin: ___%
+    New garment exposed leg skin: ___%
+    
+    Is new garment exposed skin LESS than subject exposed skin?
+      If YES → left_leg = TRUE, right_leg = TRUE ✓
+      If NO → left_leg = FALSE, right_leg = FALSE
+
+  STEP 4: CHECK GARMENT TYPE SIMILARITY:
+    If the type of lower garment is similar for both subject and new garment,
+    then left_leg = FALSE, right_leg = FALSE regardless of skin exposure.
+
+DETAILED EXAMPLES OF LEG MEASUREMENTS:
+
+  Case 1 ✓ TRUE:
+    Subject: Shorts (cloth ends at knee)
+      → From knee to toes = calf + foot exposed
+      → Estimated exposed: 50%
+    New: Full-length pants (cloth ends at ankle)
+      → From ankle to toes = foot exposed
+      → Estimated exposed: 5%
+    Comparison: 50% > 5% (new exposes LESS)
+    Garment type NOT similar
+    Result: left_leg = TRUE, right_leg = TRUE ✓
+
+  Case 2 ✗ FALSE:
+    Subject: Full-length jeans (cloth ends at ankle, foot shows)
+      → From ankle to toes = foot exposed
+      → Estimated exposed: 5%
+    New: Full-length dress pants (cloth ends at ankle, same coverage)
+      → From ankle to toes = foot exposed
+      → Estimated exposed: 5%
+    Garment type IS similar (both full-length pants)
+    Result: left_leg = FALSE, right_leg = FALSE ✗
+
+  Case 3 ✗ FALSE:
+    Subject: Midi skirt (cloth ends at mid-calf)
+      → From mid-calf to toes = lower calf + foot exposed
+      → Estimated exposed: 25%
+    New: Another midi skirt (cloth ends at mid-calf)
+      → From mid-calf to toes = lower calf + foot exposed
+      → Estimated exposed: 25%
+    Garment type IS similar (both midi skirts)
+    Result: left_leg = FALSE, right_leg = FALSE ✗
+
+  Case 4 ✓ TRUE:
+    Subject: Mini skirt (cloth ends at mid-thigh)
+      → From mid-thigh to toes = thigh + calf + foot exposed
+      → Estimated exposed: 70%
+    New: Maxi dress (cloth ends at ankle)
+      → From ankle to toes = foot exposed
+      → Estimated exposed: 5%
+    Comparison: 70% > 5% (new exposes LESS)
+    Garment type NOT similar
+    Result: left_leg = TRUE, right_leg = TRUE ✓
+
+=============================================================================
+DECISION TREE FOR ALL LIMBS
+=============================================================================
+
+For LEFT_ARM (same logic for RIGHT_ARM):
+
+  STEP 1: Measure subject's exposed arm skin
+    └─ Where does subject's cloth end? _____
+    └─ How much arm skin is exposed? ____%
+
+  STEP 2: Measure new garment's exposed arm skin
+    └─ Where does new garment's cloth end? _____
+    └─ How much arm skin would be exposed? ____%
+
+  STEP 3: Compare
+    └─ Is new garment's exposed % LESS than subject's exposed %?
+       ├─ YES: left_arm = TRUE ✓ (new covers more)
+       └─ NO: left_arm = FALSE (same or new exposes more)
+
+  STEP 4: Check dress type similarity
+    └─ If dress type is similar for subject and new garment:
+         left_arm = FALSE, right_arm = FALSE
+
+For LEFT_LEG (same logic for RIGHT_LEG):
+
+  STEP 1: Measure subject's exposed leg skin
+    └─ Where does subject's lower garment cloth end? _____
+    └─ How much leg skin is exposed? ____%
+
+  STEP 2: Measure new garment's exposed leg skin
+    └─ Where does new garment's cloth end? _____
+    └─ How much leg skin would be exposed? ____%
+
+  STEP 3: Compare
+    └─ Is new garment's exposed % LESS than subject's exposed %?
+       ├─ YES: left_leg = TRUE ✓ (new covers more)
+       └─ NO: left_leg = FALSE (same or new exposes more)
+
+  STEP 4: Check garment type similarity
+    └─ If lower garment type is similar for subject and new garment:
+         left_leg = FALSE, right_leg = FALSE
+
+SIMPLE VISUAL CHECKS:
+  ARMS: "Does the new garment's cloth extend FURTHER down the arm than subject's?"
+    ├─ YES → left_arm = TRUE (if dress type is NOT similar)
+    └─ NO → left_arm = FALSE
+
+  LEGS: "Does the new garment's cloth extend FURTHER down the leg than subject's?"
+    ├─ YES → left_leg = TRUE (if garment type is NOT similar)
+    └─ NO → left_leg = FALSE
+
+=============================================================================
+GARMENT CATEGORY BOOLEANS
+=============================================================================
+
+upper_clothes (boolean)
+  • TRUE if new garment is shirt/top/jacket/hoodie/dress
+  • FALSE if new garment is only pants or skirt alone
+
+pants (boolean)
+  • TRUE if new garment is pants/trousers/shorts
+  • FALSE if new garment is only shirt/skirt/dress
+
+skirt (boolean)
+  • TRUE if new garment is a skirt
+  • FALSE otherwise
+
+dress (boolean)
+  • TRUE if new garment is one-piece dress
+  • FALSE if garment is separates
+
+lower_neck (boolean)
+  • TRUE if new garment has high-neck/turtleneck
+  • FALSE for regular neck types
+
+=============================================================================
+OUTPUT JSON SCHEMA
+=============================================================================
+
+Your response MUST be a valid JSON object with this EXACT structure:
+
+{
+  "subject_clothes_type": "string description of current outfit",
+  "clothes_type": "string description of new clothing",
+  "upper_clothes": boolean,
+  "pants": boolean,
+  "skirt": boolean,
+  "dress": boolean,
+  "left_arm": boolean,
+  "right_arm": boolean,
+  "left_leg": boolean,
+  "right_leg": boolean,
+  "lower_neck": boolean
+}
+
+Field Specifications:
+──────────────────────
+
+subject_clothes_type (string)
+  • Describe the person's current outfit
+  • Include sleeve type and lower garment coverage
+  • Examples: "white short-sleeve t-shirt and black shorts"
+
+clothes_type (string)
+  • Describe the new garment
+  • Include sleeve type and lower garment coverage
+  • Examples: "light blue long-sleeve hoodie and full-length pants"
+
+upper_clothes (boolean)
+  • TRUE if you want to remove shirt/hoodie/upper_half_clothes from the subject
+  • FALSE otherwise
+
+pants (boolean)
+  • TRUE if you want to remove pants/leggings/shorts from the subject
+  • FALSE otherwise
+
+skirt (boolean)
+  • TRUE if you want to remvove a skirt from the subject
+  • FALSE otherwise
+
+dress (boolean)
+  • TRUE if you want to remove a one-piece dress from the subject
+  • FALSE otherwise
+
+lower_neck (boolean)
+  • TRUE if the subjects neckline is more exposed than what the garment image needs
+  • FALSE otherwise
+
+left_arm (boolean)
+  • TRUE ONLY IF: New garment exposes LESS arm skin than subject
+                  (new garment cloth covers MORE arm)
+                  AND dress type is NOT similar for subject and new garment
+  • FALSE in ALL other cases
+  • Default: FALSE
+  • Key comparison: Does new garment's cloth extend further down arm?
+  • If dress type is similar, always FALSE
+
+right_arm (boolean)
+  • TRUE ONLY IF: New garment exposes LESS arm skin than subject
+                  (new garment cloth covers MORE arm)
+                  AND dress type is NOT similar for subject and new garment
+  • FALSE in ALL other cases
+  • Default: FALSE
+  • Key comparison: Does new garment's cloth extend further down arm?
+  • If dress type is similar, always FALSE
+
+left_leg (boolean)
+  • TRUE ONLY IF: New garment exposes LESS leg skin than subject
+                  (new garment cloth covers MORE leg)
+                  AND lower garment type is NOT similar for subject and new garment
+  • FALSE in ALL other cases
+  • Default: FALSE
+  • Key comparison: Does new garment's cloth extend further down leg?
+  • If lower garment type is similar, always FALSE
+
+right_leg (boolean)
+  • TRUE ONLY IF: New garment exposes LESS leg skin than subject
+                  (new garment cloth covers MORE leg)
+                  AND lower garment type is NOT similar for subject and new garment
+  • FALSE in ALL other cases
+  • Default: FALSE
+  • Key comparison: Does new garment's cloth extend further down leg?
+  • If lower garment type is similar, always FALSE
+
+=============================================================================
+WORKED EXAMPLES WITH CORRECT LOGIC
+=============================================================================
+
+─────────────────────────────────────────────────────────────────────────────
+SECTION A: ARM-ONLY EXAMPLES
+─────────────────────────────────────────────────────────────────────────────
+
+EXAMPLE A1: Short-Sleeve T-Shirt → Long-Sleeve Hoodie ✓ SHOULD BE TRUE
+───────────────────────────────────────────────────────────────────────
+Subject: White short-sleeve t-shirt (cloth ends at elbow, ~40% arm exposed)
+New Garment: Light blue long-sleeve hoodie (cloth ends at wrist, ~10% arm exposed)
+
+Analysis:
+  Subject exposed arm: 40% (forearm and hand visible)
+  New exposed arm: 10% (only hand visible at wrist)
+  Comparison: 40% > 10% (new exposes LESS)
+  Dress type NOT similar
+  Result: left_arm = TRUE, right_arm = TRUE ✓
+
+Output:
+{
+  "subject_clothes_type": "white short-sleeve t-shirt and black pants",
+  "clothes_type": "light blue long-sleeve hoodie",
+  "upper_clothes": true,
+  "pants": false,
+  "skirt": false,
+  "dress": false,
+  "left_arm": true,
+  "right_arm": true,
+  "left_leg": false,
+  "right_leg": false,
+  "lower_neck": false
+}
+
+
+EXAMPLE A2: Long-Sleeve Shirt → Long-Sleeve Hoodie ✗ SHOULD BE FALSE
+─────────────────────────────────────────────────────────────────────
+Subject: White button-down shirt (cloth ends at wrist, ~10% arm exposed)
+New Garment: Maroon hoodie with long sleeves (cloth ends at wrist, ~10% arm exposed)
+
+Analysis:
+  Subject exposed arm: 10% (hand slightly visible)
+  New exposed arm: 10% (hand slightly visible, same coverage)
+  Dress type IS similar (both long-sleeve)
+  Result: left_arm = FALSE, right_arm = FALSE ✗
+
+Output:
+{
+  "subject_clothes_type": "white button-down shirt with long sleeves",
+  "clothes_type": "maroon hoodie with long sleeves",
+  "upper_clothes": true,
+  "pants": false,
+  "skirt": false,
+  "dress": false,
+  "left_arm": false,
+  "right_arm": false,
+  "left_leg": false,
+  "right_leg": false,
+  "lower_neck": false
+}
+
+
+EXAMPLE A3: Sleeveless Top → Long-Sleeve Dress ✓ SHOULD BE TRUE
+────────────────────────────────────────────────────────────────
+Subject: Sleeveless tank top (cloth ends at shoulder, 100% arm exposed)
+New Garment: Long-sleeve dress (cloth ends at wrist, ~10% arm exposed)
+
+Analysis:
+  Subject exposed arm: 100% (full arm visible)
+  New exposed arm: 10% (hand at wrist)
+  Dress type NOT similar
+  Result: left_arm = TRUE, right_arm = TRUE ✓
+
+Output:
+{
+  "subject_clothes_type": "sleeveless tank top",
+  "clothes_type": "long-sleeve dress",
+  "upper_clothes": false,
+  "pants": false,
+  "skirt": false,
+  "dress": true,
+  "left_arm": true,
+  "right_arm": true,
+  "left_leg": false,
+  "right_leg": false,
+  "lower_neck": false
+}
+
+
+EXAMPLE A4: Long-Sleeve → Short-Sleeve ✗ SHOULD BE FALSE
+─────────────────────────────────────────────────────────
+Subject: Long-sleeve shirt (cloth ends at wrist, ~10% arm exposed)
+New Garment: Short-sleeve top (cloth ends at elbow, ~40% arm exposed)
+
+Analysis:
+  Subject exposed arm: 10% (hand at wrist)
+  New exposed arm: 40% (forearm and hand exposed)
+  Dress type NOT similar
+  Result: left_arm = FALSE, right_arm = FALSE ✗
+
+Output:
+{
+  "subject_clothes_type": "long-sleeve shirt",
+  "clothes_type": "short-sleeve top",
+  "upper_clothes": true,
+  "pants": false,
+  "skirt": false,
+  "dress": false,
+  "left_arm": false,
+  "right_arm": false,
+  "left_leg": false,
+  "right_leg": false,
+  "lower_neck": false
+}
+
+
+EXAMPLE A5: Short-Sleeve → Sleeveless ✗ SHOULD BE FALSE
+────────────────────────────────────────────────────────
+Subject: Short-sleeve knit top (cloth ends at elbow, ~40% arm exposed)
+New Garment: Sleeveless dress (cloth ends at shoulder, 100% arm exposed)
+
+Analysis:
+  Subject exposed arm: 40% (forearm and hand)
+  New exposed arm: 100% (full arm)
+  Dress type NOT similar
+  Result: left_arm = FALSE, right_arm = FALSE ✗
+
+Output:
+{
+  "subject_clothes_type": "short-sleeve knit top",
+  "clothes_type": "sleeveless dress",
+  "upper_clothes": false,
+  "pants": false,
+  "skirt": false,
+  "dress": true,
+  "left_arm": false,
+  "right_arm": false,
+  "left_leg": false,
+  "right_leg": false,
+  "lower_neck": false
+}
+
+
+─────────────────────────────────────────────────────────────────────────────
+SECTION B: LEG-ONLY EXAMPLES
+─────────────────────────────────────────────────────────────────────────────
+
+EXAMPLE B1: Shorts → Full-Length Pants ✓ SHOULD BE TRUE
+────────────────────────────────────────────────────────
+Subject: Black shorts (cloth ends at knee, ~50% leg exposed)
+New Garment: Dark blue full-length pants (cloth ends at ankle, ~5% leg exposed)
+
+Analysis:
+  Subject exposed leg: 50% (calf and foot visible)
+  New exposed leg: 5% (only foot visible at ankle)
+  Comparison: 50% > 5% (new exposes LESS)
+  Garment type NOT similar
+  Result: left_leg = TRUE, right_leg = TRUE ✓
+
+Output:
+{
+  "subject_clothes_type": "white t-shirt and black shorts",
+  "clothes_type": "dark blue full-length pants",
+  "upper_clothes": false,
+  "pants": true,
+  "skirt": false,
+  "dress": false,
+  "left_arm": false,
+  "right_arm": false,
+  "left_leg": true,
+  "right_leg": true,
+  "lower_neck": false
+}
+
+
+EXAMPLE B2: Jeans → Jeans ✗ SHOULD BE FALSE
+───────────────────────────────────────────
+Subject: Blue jeans (cloth ends at ankle, ~5% leg exposed)
+New Garment: Black jeans (cloth ends at ankle, ~5% leg exposed)
+
+Analysis:
+  Subject exposed leg: 5% (foot visible)
+  New exposed leg: 5% (foot visible, same coverage)
+  Garment type IS similar (both full-length jeans)
+  Result: left_leg = FALSE, right_leg = FALSE ✗
+
+Output:
+{
+  "subject_clothes_type": "white shirt and blue jeans",
+  "clothes_type": "black jeans",
+  "upper_clothes": false,
+  "pants": true,
+  "skirt": false,
+  "dress": false,
+  "left_arm": false,
+  "right_arm": false,
+  "left_leg": false,
+  "right_leg": false,
+  "lower_neck": false
+}
+
+
+EXAMPLE B3: Mini Skirt → Maxi Skirt ✓ SHOULD BE TRUE
+────────────────────────────────────────────────────
+Subject: Mini skirt (cloth ends at mid-thigh, ~70% leg exposed)
+New Garment: Maxi skirt (cloth ends at ankle, ~5% leg exposed)
+
+Analysis:
+  Subject exposed leg: 70% (thigh, calf, and foot visible)
+  New exposed leg: 5% (only foot at ankle)
+  Comparison: 70% > 5% (new exposes LESS)
+  Garment type NOT similar
+  Result: left_leg = TRUE, right_leg = TRUE ✓
+
+Output:
+{
+  "subject_clothes_type": "blouse and mini skirt",
+  "clothes_type": "maxi skirt",
+  "upper_clothes": false,
+  "pants": false,
+  "skirt": true,
+  "dress": false,
+  "left_arm": false,
+  "right_arm": false,
+  "left_leg": true,
+  "right_leg": true,
+  "lower_neck": false
+}
+
+
+EXAMPLE B4: Full-Length Pants → Shorts ✗ SHOULD BE FALSE
+─────────────────────────────────────────────────────────
+Subject: Full-length pants (cloth ends at ankle, ~5% leg exposed)
+New Garment: Shorts (cloth ends at knee, ~50% leg exposed)
+
+Analysis:
+  Subject exposed leg: 5% (foot at ankle)
+  New exposed leg: 50% (calf and foot exposed)
+  Garment type NOT similar
+  Result: left_leg = FALSE, right_leg = FALSE ✗
+
+Output:
+{
+  "subject_clothes_type": "t-shirt and full-length pants",
+  "clothes_type": "shorts",
+  "upper_clothes": false,
+  "pants": true,
+  "skirt": false,
+  "dress": false,
+  "left_arm": false,
+  "right_arm": false,
+  "left_leg": false,
+  "right_leg": false,
+  "lower_neck": false
+}
+
+
+EXAMPLE B5: Capri Pants → Full-Length Pants ✓ SHOULD BE TRUE
+─────────────────────────────────────────────────────────────
+Subject: Capri pants (cloth ends at mid-calf, ~25% leg exposed)
+New Garment: Full-length pants (cloth ends at ankle, ~5% leg exposed)
+
+Analysis:
+  Subject exposed leg: 25% (lower calf and foot visible)
+  New exposed leg: 5% (only foot at ankle)
+  Comparison: 25% > 5% (new exposes LESS)
+  Garment type NOT similar
+  Result: left_leg = TRUE, right_leg = TRUE ✓
+
+Output:
+{
+  "subject_clothes_type": "blouse and capri pants",
+  "clothes_type": "full-length pants",
+  "upper_clothes": false,
+  "pants": true,
+  "skirt": false,
+  "dress": false,
+  "left_arm": false,
+  "right_arm": false,
+  "left_leg": true,
+  "right_leg": true,
+  "lower_neck": false
+}
+
+
+EXAMPLE B6: Knee-Length Skirt → Midi Skirt ✓ SHOULD BE TRUE
+───────────────────────────────────────────────────────────
+Subject: Knee-length skirt (cloth ends at knee, ~50% leg exposed)
+New Garment: Midi skirt (cloth ends at mid-calf, ~25% leg exposed)
+
+Analysis:
+  Subject exposed leg: 50% (calf and foot visible)
+  New exposed leg: 25% (lower calf and foot visible)
+  Comparison: 50% > 25% (new exposes LESS)
+  Garment type NOT similar (knee-length vs midi)
+  Result: left_leg = TRUE, right_leg = TRUE ✓
+
+Output:
+{
+  "subject_clothes_type": "polo shirt and knee-length skirt",
+  "clothes_type": "midi skirt",
+  "upper_clothes": false,
+  "pants": false,
+  "skirt": true,
+  "dress": false,
+  "left_arm": false,
+  "right_arm": false,
+  "left_leg": true,
+  "right_leg": true,
+  "lower_neck": false
+}
+
+
+EXAMPLE B7: Bermuda Shorts → Ankle Pants ✓ SHOULD BE TRUE
+──────────────────────────────────────────────────────────
+Subject: Bermuda shorts (cloth ends just above knee, ~45% leg exposed)
+New Garment: Ankle-length pants (cloth ends at ankle, ~5% leg exposed)
+
+Analysis:
+  Subject exposed leg: 45% (knee, calf, and foot visible)
+  New exposed leg: 5% (only foot at ankle)
+  Comparison: 45% > 5% (new exposes LESS)
+  Garment type NOT similar
+  Result: left_leg = TRUE, right_leg = TRUE ✓
+
+Output:
+{
+  "subject_clothes_type": "gray t-shirt and bermuda shorts",
+  "clothes_type": "ankle-length pants",
+  "upper_clothes": false,
+  "pants": true,
+  "skirt": false,
+  "dress": false,
+  "left_arm": false,
+  "right_arm": false,
+  "left_leg": true,
+  "right_leg": true,
+  "lower_neck": false
+}
+
+
+─────────────────────────────────────────────────────────────────────────────
+SECTION C: COMBINED EXAMPLES (ARMS + LEGS)
+─────────────────────────────────────────────────────────────────────────────
+
+EXAMPLE C1: Short-Sleeve + Shorts → Long-Sleeve + Pants ✓✓ BOTH TRUE
+─────────────────────────────────────────────────────────────────────
+Subject: White short-sleeve t-shirt (cloth ends at elbow, ~40% arm exposed)
+         Black shorts (cloth ends at knee, ~50% leg exposed)
+New Garment: Light blue long-sleeve hoodie (cloth ends at wrist, ~10% arm exposed)
+             Dark blue full-length pants (cloth ends at ankle, ~5% leg exposed)
+
+Analysis:
+  ARMS:
+    Subject exposed arm: 40% (forearm and hand visible)
+    New exposed arm: 10% (only hand visible at wrist)
+    Comparison: 40% > 10% (new exposes LESS)
+    Dress type NOT similar
+    Result: left_arm = TRUE, right_arm = TRUE ✓
+  
+  LEGS:
+    Subject exposed leg: 50% (calf and foot visible)
+    New exposed leg: 5% (only foot visible at ankle)
+    Comparison: 50% > 5% (new exposes LESS)
+    Garment type NOT similar
+    Result: left_leg = TRUE, right_leg = TRUE ✓
+
+Output:
+{
+  "subject_clothes_type": "white short-sleeve t-shirt and black shorts",
+  "clothes_type": "light blue long-sleeve hoodie and dark blue full-length pants",
+  "upper_clothes": true,
+  "pants": true,
+  "skirt": false,
+  "dress": false,
+  "left_arm": true,
+  "right_arm": true,
+  "left_leg": true,
+  "right_leg": true,
+  "lower_neck": false
+}
+
+
+EXAMPLE C2: Long-Sleeve + Jeans → Long-Sleeve + Jeans ✗✗ BOTH FALSE
+────────────────────────────────────────────────────────────────────
+Subject: White button-down shirt (cloth ends at wrist, ~10% arm exposed)
+         Blue jeans (cloth ends at ankle, ~5% leg exposed)
+New Garment: Maroon hoodie with long sleeves (cloth ends at wrist, ~10% arm exposed)
+             Black jeans (cloth ends at ankle, ~5% leg exposed)
+
+Analysis:
+  ARMS:
+    Subject exposed arm: 10% (hand slightly visible)
+    New exposed arm: 10% (hand slightly visible, same coverage)
+    Dress type IS similar (both long-sleeve)
+    Result: left_arm = FALSE, right_arm = FALSE ✗
+  
+  LEGS:
+    Subject exposed leg: 5% (foot visible)
+    New exposed leg: 5% (foot visible, same coverage)
+    Garment type IS similar (both full-length pants)
+    Result: left_leg = FALSE, right_leg = FALSE ✗
+
+Output:
+{
+  "subject_clothes_type": "white button-down shirt with long sleeves and blue jeans",
+  "clothes_type": "maroon hoodie with long sleeves and black jeans",
+  "upper_clothes": true,
+  "pants": true,
+  "skirt": false,
+  "dress": false,
+  "left_arm": false,
+  "right_arm": false,
+  "left_leg": false,
+  "right_leg": false,
+  "lower_neck": false
+}
+
+
+EXAMPLE C3: Sleeveless + Mini Skirt → Long-Sleeve Maxi Dress ✓✓ BOTH TRUE
+──────────────────────────────────────────────────────────────────────────
+Subject: Sleeveless tank top (cloth ends at shoulder, 100% arm exposed)
+         Mini skirt (cloth ends at mid-thigh, ~70% leg exposed)
+New Garment: Long-sleeve maxi dress (cloth ends at wrist, ~10% arm exposed)
+             (cloth ends at ankle, ~5% leg exposed)
+
+Analysis:
+
+  DRESS:
+    Subject wears
+  ARMS:
+    Subject exposed arm: 100% (full arm visible)
+    New exposed arm: 10% (hand at wrist)
+    Dress type NOT similar
+    Result: left_arm = TRUE, right_arm = TRUE ✓
+  
+  LEGS:
+    Subject exposed leg: 70% (thigh and calf visible)
+    New exposed leg: 5% (foot at ankle)
+    Garment type NOT similar
+    Result: left_leg = TRUE, right_leg = TRUE ✓
+
+Output:
+{
+  "subject_clothes_type": "sleeveless tank top and mini skirt",
+  "clothes_type": "long-sleeve maxi dress",
+  "upper_clothes": true,
+  "pants": false,
+  "skirt": false,
+  "dress": false,
+  "left_arm": true,
+  "right_arm": true,
+  "left_leg": true,
+  "right_leg": true,
+  "lower_neck": false
+}
+
+
+EXAMPLE C4: Long-Sleeve + Pants → Short-Sleeve + Shorts ✗✗ BOTH FALSE
+──────────────────────────────────────────────────────────────────────
+Subject: Long-sleeve shirt (cloth ends at wrist, ~10% arm exposed)
+         Full-length pants (cloth ends at ankle, ~5% leg exposed)
+New Garment: Short-sleeve top (cloth ends at elbow, ~40% arm exposed)
+             Shorts (cloth ends at knee, ~50% leg exposed)
+
+Analysis:
+  ARMS:
+    Subject exposed arm: 10% (hand at wrist)
+    New exposed arm: 40% (forearm and hand exposed)
+    Dress type NOT similar
+    Result: left_arm = FALSE, right_arm = FALSE ✗
+  
+  LEGS:
+    Subject exposed leg: 5% (foot at ankle)
+    New exposed leg: 50% (calf and foot exposed)
+    Garment type NOT similar
+    Result: left_leg = FALSE, right_leg = FALSE ✗
+
+Output:
+{
+  "subject_clothes_type": "long-sleeve shirt and full-length pants",
+  "clothes_type": "short-sleeve top and shorts",
+  "upper_clothes": true,
+  "pants": true,
+  "skirt": false,
+  "dress": false,
+  "left_arm": false,
+  "right_arm": false,
+  "left_leg": false,
+  "right_leg": false,
+  "lower_neck": false
+}
+
+
+EXAMPLE C5: Short-Sleeve + Capri → Sleeveless + Full-Length ✗✓ MIXED
+─────────────────────────────────────────────────────────────────────
+Subject: Short-sleeve knit top (cloth ends at elbow, ~40% arm exposed)
+         Capri pants (cloth ends at mid-calf, ~25% leg exposed)
+New Garment: Sleeveless dress top (cloth ends at shoulder, 100% arm exposed)
+             Full-length pants (cloth ends at ankle, ~5% leg exposed)
+
+Analysis:
+  ARMS:
+    Subject exposed arm: 40% (forearm and hand)
+    New exposed arm: 100% (full arm)
+    Dress type NOT similar
+    Result: left_arm = FALSE, right_arm = FALSE ✗
+  
+  LEGS:
+    Subject exposed leg: 25% (lower calf and foot)
+    New exposed leg: 5% (foot at ankle)
+    Comparison: 25% > 5% (new exposes LESS)
+    Garment type NOT similar
+    Result: left_leg = TRUE, right_leg = TRUE ✓
+
+Output:
+{
+  "subject_clothes_type": "short-sleeve knit top and capri pants",
+  "clothes_type": "sleeveless top and full-length pants",
+  "upper_clothes": true,
+  "pants": true,
+  "skirt": false,
+  "dress": false,
+
+=============================================================================
+COMPARISON MATRICES
+=============================================================================
+
+ARM COMPARISON MATRIX:
+
+Subject Sleeve        | New Sleeve             | Subject Exposed | New Exposed | left_arm | Reason
+─────────────────────────────────────────────────────────────────────────────────────────────────
+Sleeveless            | Long-sleeve            |      100%       |      10%    |  TRUE    | New covers full arm
+Sleeveless            | Short-sleeve           |      100%       |      40%    |  TRUE    | New covers upper arm
+Short-sleeve          | Long-sleeve            |       40%       |      10%    |  TRUE    | New covers forearm
+3/4-sleeve            | Long-sleeve            |       25%       |      10%    |  TRUE    | New covers wrist
+Long-sleeve           | Long-sleeve            |       10%       |      10%    |  FALSE   | Same or similar dress type
+Short-sleeve          | Short-sleeve           |       40%       |      40%    |  FALSE   | Same or similar dress type
+Long-sleeve           | Short-sleeve           |       10%       |      40%    |  FALSE   | New exposes more
+Sleeveless            | Sleeveless             |      100%       |     100%    |  FALSE   | Same or similar dress type
+Short-sleeve          | Sleeveless             |       40%       |     100%    |  FALSE   | New exposes more
+
+LEG COMPARISON MATRIX:
+
+Subject Lower         | New Lower              | Subject Exposed | New Exposed | left_leg | Reason
+─────────────────────────────────────────────────────────────────────────────────────────────────
+Mini skirt            | Maxi dress             |       70%       |       5%    |  TRUE    | New covers full leg
+Shorts                | Full-length pants      |       50%       |       5%    |  TRUE    | New covers calf
+Capri pants           | Full-length pants      |       25%       |       5%    |  TRUE    | New covers ankle
+Knee-length skirt     | Midi skirt             |       50%       |      25%    |  TRUE    | New covers calf
+Full-length pants     | Full-length pants      |        5%       |       5%    |  FALSE   | Same or similar type
+Shorts                | Shorts                 |       50%       |      50%    |  FALSE   | Same or similar type
+Full-length pants     | Shorts                 |        5%       |      50%    |  FALSE   | New exposes more
+Midi skirt            | Midi skirt             |       25%       |      25%    |  FALSE   | Same or similar type
+Capri pants           | Shorts                 |       25%       |      50%    |  FALSE   | New exposes more
+
+KEY RULES: 
+  limb boolean = TRUE ONLY WHEN new garment's exposed % < subject's exposed %
+  AND garment type is NOT similar
+
+=============================================================================
+CRITICAL REMINDER
+=============================================================================
+
+The ONLY time limb booleans (left_arm, right_arm, left_leg, right_leg) are TRUE:
+
+  "The new garment covers MORE of the limb (exposes LESS skin)
+   than what the subject is currently wearing."
+  AND the type of garment is NOT similar for subject and new garment.
+
+  Do NOT set to TRUE just because:
+  • The new garment is long-sleeve or full-length
+  • The new garment covers something
+  • The new garment is different
+
+  Set to TRUE ONLY when the COMPARISON shows:
+  • New garment's cloth extends FURTHER down the limb
+  • New garment exposes LESS skin than subject's garment
+  • Garment type is NOT similar
+
+=============================================================================
