@@ -33,7 +33,7 @@ class ImageMatcher:
                                       candidate_masks: List[Image.Image], 
                                       candidate_blank_masks: List[Image.Image],
                                       candidate_bboxes: List[List[int]], 
-                                      threshold: float) -> Tuple[List, List, List, List, List, List]:
+                                      threshold: float) -> Tuple[List[Image.Image], List[Image.Image], List[Image.Image],List[Image.Image], List[Image.Image], List]:
         """
         Finds the best match for each reference image from the candidates and filters
         out any matches below the threshold.

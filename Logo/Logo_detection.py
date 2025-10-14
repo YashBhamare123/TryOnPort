@@ -3,7 +3,7 @@ import numpy as np
 from PIL import Image
 from scipy import ndimage
 from transformers import Owlv2Processor, Owlv2ForObjectDetection
-
+from typing import List, Tuple
 
 class LogoBatchCropperTensor:
     def __init__(self):
@@ -14,7 +14,7 @@ class LogoBatchCropperTensor:
         self.model.to(self.device)
         print(f"Model loaded successfully on device: {self.device}")
 
-    def process_image(self, image_tensor: torch.Tensor, prompt: str, threshold: float, detection_padding: int, crop_padding: int):
+    def process_image(self, image_tensor: torch.Tensor, prompt: str, threshold: float, detection_padding: int, crop_padding: int) ->Tuple[List[Image.Image], List[Image.Image], List[Image.Image],List]:
 
         if image_tensor.ndim != 3 or image_tensor.shape[0] not in [1, 3, 4]:
             raise ValueError("Input tensor must be 3-dimensional in (C, H, W) format.")
@@ -103,5 +103,5 @@ class LogoBatchCropperTensor:
         pil_images = [Image.fromarray(img) for img in final_images_np]
         pil_masks = [Image.fromarray((msk * 255).astype(np.uint8)) for msk in final_masks_np]
         pil_blanks = [Image.fromarray(b) for b in blank_masks_np]
-
+        print("logo_images",len(pil_images))
         return pil_images, pil_masks, pil_blanks, bounding_boxes

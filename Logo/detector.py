@@ -1,13 +1,22 @@
 import torch
 from typing import List, Tuple
 from PIL import Image
+import numpy as np
+from torchvision.transforms import ToPILImage, ToTensor
 from similarity import ImageMatcher
 from Logo.Logo_detection import LogoBatchCropperTensor
 from Logo.pasting_utils import ImagePaster
-from Logo.Utils import concatenate_images_from_memory, concatenate_masks_from_memory, deconcatenate_batch_horizontally
+from Logo.Utils import deconcatenate_batch_horizontally, concatenate_images_from_memory, concatenate_masks_from_memory
 cropTensor = LogoBatchCropperTensor()
 matcher = ImageMatcher()
 paster = ImagePaster()
+
+def pil_to_tensorss(pil_image: Image.Image) -> torch.Tensor:
+    """
+    Converts a PIL Image to a PyTorch tensor.
+    Assumes input is a PIL Image and returns a (H, W, C) tensor of type uint8.
+    """
+    return torch.from_numpy(np.array(pil_image))
 
 def process_logo(
     input_tensor_ref: torch.Tensor,
@@ -34,6 +43,7 @@ def process_logo(
         detection_padding=detection_padding_ref,
         crop_padding=crop_padding_ref
     )
+    
     match_ref_images, match_ref_blank_masks,match_images, matched_masks, _, matched_bounding_boxes= matcher.find_best_matches_from_memory(
         ref_images=ref_images,
         ref_blank_masks=ref_blank_masks,
@@ -43,7 +53,8 @@ def process_logo(
         candidate_bboxes=candidate_bboxes,
         threshold=matching_threshold
     )
-    #Debugging
+    for i, img in enumerate(match_ref_images):
+        img.save(f"match_ref_image{i}.png")
     print("match_ref_images",len(match_ref_images))
     print("match_images",len(match_images))
     print("candidate_masks",len(matched_masks))
@@ -55,9 +66,10 @@ def process_logo(
     print("pixel_space size:",pixel_space.size())
     print("inpaint_mask",inpaint_mask_input.shape)
     for i, img in enumerate( match_ref_images):
-        print("ref_img:",img.size)
-    # Debugging ends
-    return pixel_space, original_width, inpaint_mask_input, matched_bounding_boxes,  match_ref_images
+        print("ref_img:",ToTensor()(img).shape)
+    match_ref_batch = torch.stack([ToTensor()(img) for img in match_ref_images])
+    print("match_ref_batch",match_ref_batch.shape)
+    return pixel_space, original_width, inpaint_mask_input, matched_bounding_boxes,  match_ref_batch
 
 
 def deconcatenation(
