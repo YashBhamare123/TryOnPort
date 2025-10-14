@@ -1,9 +1,13 @@
 import torch
 from typing import List, Tuple
 from PIL import Image
+<<<<<<< HEAD
 import numpy as np
 from torchvision.transforms import ToPILImage, ToTensor
 from similarity import ImageMatcher
+=======
+from Logo.similarity import ImageMatcher
+>>>>>>> 12a7c1a91633f70985d42be0f87dc00f115b5669
 from Logo.Logo_detection import LogoBatchCropperTensor
 from Logo.pasting_utils import ImagePaster
 from Logo.Utils import deconcatenate_batch_horizontally, concatenate_images_from_memory, concatenate_masks_from_memory

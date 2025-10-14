@@ -203,6 +203,8 @@ class PreprocessImage:
         print(sub_img.size())
         print(sub_mask.size())
         B, _, H, W = gar_img.size()
+        sub_width = sub_img.size()[-1]
+
 
 
         blank_mask = torch.zeros((B, 1, H, W))
@@ -218,9 +220,13 @@ class PreprocessImage:
         show_tensor(inpaint_img, 'inpaing_image')
         show_tensor(inpaint_mask, 'inpaint_mask')
 
-        return inpaint_img, inpaint_mask
+        return inpaint_img, inpaint_mask, sub_width
 
-
+    def postprocess(self, inpaint_img : torch.Tensor, subject_width : int):
+        inpaint_img = inpaint_img.unsqueeze(0)
+        img = inpaint_img[:, :, :, :subject_width]
+        garment = inpaint_img[:, :, :, subject_width:]
+        return img, garment
 
 if __name__ == "__main__":
     params = PreprocessConfig(

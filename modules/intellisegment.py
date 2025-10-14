@@ -28,8 +28,6 @@ def get_segments(subject_url: str, clothes_url : str):
         system_prompt = f.read()
 
     class SegmentChoices(BaseModel):
-        subject_clothes_type : str
-        clothes_type : str
         left_arm : bool
         right_arm : bool
         left_leg : bool
@@ -41,7 +39,7 @@ def get_segments(subject_url: str, clothes_url : str):
         lower_neck : bool
 
     completion = client.chat.completions.create(
-        model="meta-llama/llama-4-maverick-17b-128e-instruct",
+        model="meta-llama/llama-4-scout-17b-16e-instruct",
         messages=[
             {
                 "role" : "system",
@@ -78,7 +76,7 @@ def get_segments(subject_url: str, clothes_url : str):
                 ]
             }
         ],
-        temperature=1,
+        temperature=0.3,
         stop=None,
         response_format= {
             "type" : "json_schema",
@@ -94,6 +92,6 @@ def get_segments(subject_url: str, clothes_url : str):
 
 
 if __name__ == "__main__":
-    subject_url = 'https://res.cloudinary.com/dukgi26uv/image/upload/v1759842454/the-nude-v-neck-pointelle-knit-tee-tops-snhkxv_2048x_bfnch4.webp'
-    clothes_url = 'https://gcdnb.pbrd.co/images/zRpNZBcFwkZz.webp'
+    subject_url = 'https://res.cloudinary.com/dukgi26uv/image/upload/v1754043339/tryon-images/pnw39seevmetdc1mjmar.jpg'
+    clothes_url = 'https://res.cloudinary.com/dukgi26uv/image/upload/v1754143563/tryon-images/l4gx7uzvdz0ac6jqkrgn.webp'
     print(get_segments(subject_url , clothes_url))
