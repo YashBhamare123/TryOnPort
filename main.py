@@ -95,8 +95,18 @@ def generate(subject_url : str, garment_url : str, params : GenerateConfig):
 
     pixel_space, o_w, inpaint_mask, mm_bbox, logo_images = process_logo(gen_img, gar_img)
 
-    pipe_prior_logos = pipe_redux(logo_images)
-    print(pipe_prior_logos.prompt_embeds.size())
+    list_size = logo_images.size()[0]
+    logo_redux = []
+    logo_embeds = []
+    for i in range(list_size):
+        pipe_prior_logos = pipe_redux(logo_images[i].unsqueeze(0))
+        logo_redux.append(pipe_prior_logos.prompt_embeds.squeeze(0))
+        logo_embeds.append(pipe_prior_logos.pooled_prompt_embeds.squeeze(0))
+
+    pooled_prompt_embeds = torch.stack(logo_embeds, dim= 0)
+    prompt_embeds = torch.stack(logo_redux, dim = 0)
+    print(prompt_embeds.size())
+    print(pooled_prompt_embeds.size())
 
     new_out = pipe(
         image = pixel_space,
@@ -107,12 +117,13 @@ def generate(subject_url : str, garment_url : str, params : GenerateConfig):
         generator = torch.Generator(params.device).manual_seed(params.seed),
         # joint_attention_kwargs= {"scale" : params.ACE_scale},
         cfg = params.CFG,
-        **pipe_prior_logos,
+        prompt_embeds= prompt_embeds,
+        pooled_prompt_embeds= pooled_prompt_embeds
     ).images
 
     new_list = [ToTensor()(t) for t in new_out]
     new_ts = torch.stack(new_list, dim = 0)
-    out = deconcatenation(new_ts, gen_img, o_w, mm_bbox)
+    out = deconcatenation(gen_img, new_ts, o_w, mm_bbox)
     out = ToPILImage()(out[0])
     out.save('output_fill_1.png')
     print("Saved Output")

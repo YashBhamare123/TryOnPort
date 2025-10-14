@@ -197,10 +197,10 @@ def run_tryon(files: dict, file_hashes: dict):
     generate(subject_url, garment_url, params)
     
     image_list = []
-    with open("subject_image.png", "rb") as f:
+    with open("output_fill_1.png", "rb") as f:
         image_list.append(f.read())
-    with open("mask_image.png", "rb") as f:
-        image_list.append(f.read())
+    # with open("mask_image.png", "rb") as f:
+    #     image_list.append(f.read())
     
     return image_list
 
