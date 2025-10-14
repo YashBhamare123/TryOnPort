@@ -1,10 +1,15 @@
 import modal
 from pathlib import Path
 import os
+import hashlib
+import json
 
 app = modal.App("tryon-inference")
 
 volume = modal.Volume.from_name("huggingface-cache", create_if_missing=True)
+
+# Add a volume for tracking file hashes
+files_volume = modal.Volume.from_name("tryon-files", create_if_missing=True)
 
 image = (
     modal.Image.debian_slim(python_version="3.11")
@@ -97,16 +102,20 @@ image = (
     image=image,
     gpu="A100",
     timeout=600,
-    volumes={"/cache": volume},
+    volumes={
+        "/cache": volume,
+        "/files": files_volume,
+    },
     secrets=[
         modal.Secret.from_name("huggingface-secret"),
         modal.Secret.from_name("groq-secret"),
     ],
 )
-def run_tryon(files: dict):
+def run_tryon(files: dict, file_hashes: dict):
     import os
     import sys
     import importlib.util
+    import json
     
     os.environ["HF_HOME"] = "/cache"
     os.environ["TRANSFORMERS_CACHE"] = "/cache"
@@ -115,17 +124,51 @@ def run_tryon(files: dict):
     
     os.makedirs("/cache/compile", exist_ok=True)
     
+    # Load previous hashes
+    hash_file = "/files/file_hashes.json"
+    previous_hashes = {}
+    if os.path.exists(hash_file):
+        with open(hash_file, "r") as f:
+            previous_hashes = json.load(f)
+    
+    # Write only changed files
+    files_written = 0
+    files_skipped = 0
     for filename, content in files.items():
-        print(f"Writing {filename}...")
+        current_hash = file_hashes[filename]
         
-        directory = os.path.dirname(filename)
+        # Check if file needs updating
+        if filename in previous_hashes and previous_hashes[filename] == current_hash:
+            if os.path.exists(f"/files/{filename}"):
+                files_skipped += 1
+                continue
+        
+        print(f"Writing {filename}...")
+        files_written += 1
+        
+        # Write to /files volume
+        directory = os.path.dirname(f"/files/{filename}")
         if directory:
             os.makedirs(directory, exist_ok=True)
         
-        with open(filename, "w") as f:
+        with open(f"/files/{filename}", "w") as f:
             f.write(content)
     
-    spec = importlib.util.spec_from_file_location("main", "main.py")
+    print(f"Files written: {files_written}, skipped: {files_skipped}")
+    
+    # Save current hashes
+    with open(hash_file, "w") as f:
+        json.dump(file_hashes, f)
+    
+    files_volume.commit()
+    
+    # Change to /files directory to run the code
+    os.chdir("/files")
+    
+    # Add /files to Python path so imports work
+    sys.path.insert(0, "/files")
+    
+    spec = importlib.util.spec_from_file_location("main", "/files/main.py")
     main_module = importlib.util.module_from_spec(spec)
     sys.modules["main"] = main_module
     spec.loader.exec_module(main_module)
@@ -152,16 +195,21 @@ def run_tryon(files: dict):
     garment_url = "https://res.cloudinary.com/dukgi26uv/image/upload/v1759842480/Manchester_United_Home_92.94_Shirt_kyajol.webp"
 
     generate(subject_url, garment_url, params)
-    volume.commit()
+    
     image_list = []
-    # with open("output_fill_1.png", "rb") as f:
-    #     image_list.append(f.read())
     with open("subject_image.png", "rb") as f:
         image_list.append(f.read())
     with open("mask_image.png", "rb") as f:
         image_list.append(f.read())
     
     return image_list
+
+def compute_file_hash(filepath):
+    """Compute MD5 hash of a file."""
+    hasher = hashlib.md5()
+    with open(filepath, "rb") as f:
+        hasher.update(f.read())
+    return hasher.hexdigest()
 
 @app.local_entrypoint()
 def main():
@@ -170,6 +218,7 @@ def main():
     print("Starting TryOn on Modal...")
     
     files = {}
+    file_hashes = {}
     
     # Include Python files
     for py_file in glob.glob("**/*.py", recursive=True):
@@ -180,7 +229,9 @@ def main():
             continue
             
         with open(py_file, "r", encoding="utf-8") as f:
-            files[py_file] = f.read()
+            content = f.read()
+            files[py_file] = content
+            file_hashes[py_file] = hashlib.md5(content.encode()).hexdigest()
         print(f"Including {py_file}")
     
     # Include other files (txt, json, etc.)
@@ -191,7 +242,9 @@ def main():
             
             try:
                 with open(file_path, "r") as f:
-                    files[file_path] = f.read()
+                    content = f.read()
+                    files[file_path] = content
+                    file_hashes[file_path] = hashlib.md5(content.encode()).hexdigest()
                 print(f"Including {file_path}")
             except Exception as e:
                 print(f"Skipping {file_path}: {e}")
@@ -199,9 +252,9 @@ def main():
     if not files:
         print("Warning: No files found!")
     else:
-        print(f"Total files to upload: {len(files)}")
+        print(f"Total files tracked: {len(files)}")
     
-    image_bytes_list = run_tryon.remote(files)
+    image_bytes_list = run_tryon.remote(files, file_hashes)
     
     for idx, img_bytes in enumerate(image_bytes_list):
         with open(f"output_{idx}.png", "wb") as f:

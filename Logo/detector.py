@@ -1,7 +1,7 @@
 import torch
 from typing import List, Tuple
 from PIL import Image
-from similarity import ImageMatcher
+from Logo.similarity import ImageMatcher
 from Logo.Logo_detection import LogoBatchCropperTensor
 from Logo.pasting_utils import ImagePaster
 from Logo.Utils import concatenate_images_from_memory, concatenate_masks_from_memory, deconcatenate_batch_horizontally
