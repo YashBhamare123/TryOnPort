@@ -26,8 +26,8 @@ def process_logo(
     matching_threshold: float = 0.6,
     detection_padding_ref: int = 24,
     detection_padding_cand: int = 24,
-    crop_padding_ref: int = 0,
-    crop_padding_cand: int = 0
+    crop_padding_ref: int = 10,
+    crop_padding_cand: int = 10,
 ):
     candidate_images, candidate_masks, candidate_blank_masks, candidate_bboxes = cropTensor.process_image(
         image_tensor=input_tensor_cand,
@@ -90,7 +90,7 @@ def deconcatenation(
             single_image_tensor = single_image_tensor.mul(255).byte()
 
         image_np = single_image_tensor.cpu().permute(1, 2, 0).numpy()
-        pil_image = Image.fromarray(image_np)
+        pil_image = Image.fromarray(image_np, mode='RGB')
         match_images.append(pil_image)
     
     print(f"Converted batch tensor into a list of {len(match_images)} PIL images.")

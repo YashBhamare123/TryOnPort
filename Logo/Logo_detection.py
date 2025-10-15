@@ -100,8 +100,8 @@ class LogoBatchCropperTensor:
             final_masks_np.append(ndimage.zoom(msk, (1.0, final_target_width/current_width), order=0))
 
         blank_masks_np = [np.zeros_like(m, dtype=np.uint8) for m in final_masks_np]
-        pil_images = [Image.fromarray(img) for img in final_images_np]
-        pil_masks = [Image.fromarray((msk * 255).astype(np.uint8)) for msk in final_masks_np]
-        pil_blanks = [Image.fromarray(b) for b in blank_masks_np]
+        pil_images = [Image.fromarray(img, mode='RGB') for img in final_images_np]
+        pil_masks = [Image.fromarray((msk * 255).astype(np.uint8), mode='L') for msk in final_masks_np]
+        pil_blanks = [Image.fromarray(b, mode='L') for b in blank_masks_np]
         print("logo_images",len(pil_images))
         return pil_images, pil_masks, pil_blanks, bounding_boxes

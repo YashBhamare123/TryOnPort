@@ -1,4 +1,6 @@
 import torch
+import torch.nn.functional as F
+import time
 import joblib
 from diffusers import FluxFillPipeline, FluxPriorReduxPipeline, AutoencoderKL, FluxTransformer2DModel, FlowMatchEulerDiscreteScheduler
 from transformers import T5EncoderModel, CLIPTextModel, CLIPTokenizer, T5TokenizerFast
@@ -29,15 +31,21 @@ def generate(subject_url : str, garment_url : str, params : GenerateConfig):
     pipe_redux = FluxPriorReduxPipeline.from_pretrained(
         REPO_REDUX_HF,
         torch_dtype = params.dtype, 
-        low_cpu_mem_usage=True
+        low_cpu_mem_usage=True,
+        # do_rescale = False
         ).to(params.device)
 
     sampler = FlowMatchEulerDiscreteScheduler()
+
+    start = time.perf_counter()
     pipe = FluxFillPipeline.from_pretrained(
         REPO_FLUX,
         torch_dtype = params.dtype,
-        low_cpu_mem_usage=True
+        low_cpu_mem_usage=True,
+        # do_rescale = False
         ).to(params.device)
+    end = time.perf_counter()
+    print(f"Pipeline Loading Time {end - start:.2f}")
 
     pipe_prior_output = pipe_redux(
         garment_img,
@@ -46,60 +54,53 @@ def generate(subject_url : str, garment_url : str, params : GenerateConfig):
     
     pipe.scheduler = sampler
     # pipe.load_lora_weights(REPO_ACE, subfolder = REPO_ACE_SUB, filename = ACE_NAME)
-    if test:
-        processor_config = PreprocessConfig(
-            resized_height= 1024,
-        )
-        processor = PreprocessImage(processor_config)
-        image, mask, subject_width = processor.preprocess(subject_url, garment_url)
+    processor_config = PreprocessConfig(
+        resized_height= 1024,
+    )
+    processor = PreprocessImage(processor_config)
+    image, mask, subject_width = processor.preprocess(subject_url, garment_url)
 
-        pil_image = ToPILImage()(image[0])
-        pil_mask = ToPILImage()(mask[0])
-        pil_image.save('subject_image.png')
-        pil_mask.save('mask_image.png')
-        W, H = pil_image.size
-        image = image.to(device = params.device, dtype = params.dtype)
-        mask = mask.to(device = params.device, dtype = params.dtype)
+    pil_image = ToPILImage()(image[0])
+    pil_mask = ToPILImage()(mask[0])
+    pil_image.save('subject_image.png')
+    pil_mask.save('mask_image.png')
+    W, H = pil_image.size
+    image = image.to(device = params.device, dtype = params.dtype)
+    mask = mask.to(device = params.device, dtype = params.dtype)
 
-        out = pipe(
-            image = image,
-            mask_image = mask,
-            guidance_scale= params.flux_guidance,
-            num_inference_steps= params.num_steps,
-            strength = 1.,
-            generator = torch.Generator(params.device).manual_seed(params.seed),
-            height = H,
-            width = W,
-            # joint_attention_kwargs= {"scale" : params.ACE_scale},
-            cfg = params.CFG,
-            **pipe_prior_output,
-        ).images[0]
+    out = pipe(
+        image = image,
+        mask_image = mask,
+        guidance_scale= params.flux_guidance,
+        num_inference_steps= params.num_steps,
+        strength = 1.,
+        generator = torch.Generator(params.device).manual_seed(params.seed),
+        height = H,
+        width = W,
+        # joint_attention_kwargs= {"scale" : params.ACE_scale},
+        cfg = params.CFG,
+        **pipe_prior_output,
+    ).images[0]
 
         
-        # Logo Pipeline
-        out = ToTensor()(out)
-        img, gar = processor.postprocess(out, subject_width)
-        pil_img = ToPILImage()(img[0])
-        pil_gar = ToPILImage()(gar[0])
-        pil_img.save('subject_image.png')
-        pil_gar.save('mask_image.png')
-
-    gen_img = load_image('https://res.cloudinary.com/dukgi26uv/image/upload/v1760462866/output_0_ldopjx.png')
-    gar_img = load_image('https://res.cloudinary.com/dukgi26uv/image/upload/v1760462866/output_1_bjkvdg.png')
-    
-    gen_img = ToTensor()(gen_img)
-    gar_img = ToTensor()(gar_img)
+    out = ToTensor()(out)
+    gen_img, gar_img = processor.postprocess(out, subject_width)
+    pil_img = ToPILImage()(gen_img[0])
+    pil_gar = ToPILImage()(gar_img[0])
+    pil_img.save('subject_image.png')
+    pil_gar.save('mask_image.png')
 
     print(gen_img.size())
     print(gar_img.size())
 
-    pixel_space, o_w, inpaint_mask, mm_bbox, logo_images = process_logo(gen_img, gar_img)
+    pixel_space, o_w, inpaint_mask, mm_bbox, logo_images = process_logo(gar_img[0], gen_img[0])
 
     list_size = logo_images.size()[0]
     logo_redux = []
     logo_embeds = []
     for i in range(list_size):
-        pipe_prior_logos = pipe_redux(logo_images[i].unsqueeze(0))
+        img = ToPILImage()(logo_images[i])
+        pipe_prior_logos = pipe_redux(img)
         logo_redux.append(pipe_prior_logos.prompt_embeds.squeeze(0))
         logo_embeds.append(pipe_prior_logos.pooled_prompt_embeds.squeeze(0))
 
@@ -108,23 +109,48 @@ def generate(subject_url : str, garment_url : str, params : GenerateConfig):
     print(prompt_embeds.size())
     print(pooled_prompt_embeds.size())
 
+    prompt_embeds = prompt_embeds.to(device=params.device, dtype=params.dtype)
+    pooled_prompt_embeds = pooled_prompt_embeds.to(device=params.device, dtype=params.dtype)
+
+    pixel_space_pil = ToPILImage()(pixel_space[0])
+    inpaint_mask_pil = ToPILImage()(inpaint_mask[0])
+    pixel_space_pil.save('subject_image.png')
+    inpaint_mask_pil.save('mask_image.png')
+
+    pixel_space = pixel_space.to(device = params.device, dtype = params.dtype) / 255.
+    inpaint_mask= inpaint_mask.to(device = params.device, dtype= params.dtype)
+
+    pipe.load_lora_weights(REPO_ACE, subfolder = REPO_ACE_SUB, weight_name = ACE_NAME)
     new_out = pipe(
         image = pixel_space,
         mask_image = inpaint_mask,
         guidance_scale= params.flux_guidance,
-        num_inference_steps= 3,
+        num_inference_steps= params.num_steps,
         strength = 1.,
         generator = torch.Generator(params.device).manual_seed(params.seed),
-        # joint_attention_kwargs= {"scale" : params.ACE_scale},
+        joint_attention_kwargs= {"scale" : params.ACE_scale},
         cfg = params.CFG,
         prompt_embeds= prompt_embeds,
-        pooled_prompt_embeds= pooled_prompt_embeds
+        pooled_prompt_embeds= pooled_prompt_embeds,
     ).images
 
+    new_out[0].save("subject_image.png")
     new_list = [ToTensor()(t) for t in new_out]
     new_ts = torch.stack(new_list, dim = 0)
-    out = deconcatenation(gen_img, new_ts, o_w, mm_bbox)
-    out = ToPILImage()(out[0])
+
+    new_ts = F.interpolate(
+        new_ts,
+        mode = 'bilinear',
+        size = pixel_space.size()[2:],
+        align_corners= False
+    )
+
+    assert new_ts.size() == pixel_space.size(), f"{new_ts.size()} and {pixel_space.size()} do not match"
+
+    pil_gen = ToPILImage()(gen_img[0])
+    pil_gen.save('mask_image.png')
+    out = deconcatenation(gen_img[0], new_ts, o_w, mm_bbox, blend_amount= 0.0)
+    out = ToPILImage()(out)
     out.save('output_fill_1.png')
     print("Saved Output")
 

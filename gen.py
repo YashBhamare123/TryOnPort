@@ -179,7 +179,7 @@ def run_tryon(files: dict, file_hashes: dict):
     from main import generate, GenerateConfig
     
     params = GenerateConfig(
-        num_steps=25,
+        num_steps=10,
         seed=42,
         sampler='euler',
         scheduler='simple',
@@ -187,7 +187,7 @@ def run_tryon(files: dict, file_hashes: dict):
         CFG=1.,
         redux_strength=0.4,
         redux_strength_type="multiply",
-        ACE_scale=0.,
+        ACE_scale=1.,
         dtype=torch.bfloat16,
     )
 
@@ -199,8 +199,10 @@ def run_tryon(files: dict, file_hashes: dict):
     image_list = []
     with open("output_fill_1.png", "rb") as f:
         image_list.append(f.read())
-    # with open("mask_image.png", "rb") as f:
-    #     image_list.append(f.read())
+    with open("mask_image.png", "rb") as f:
+        image_list.append(f.read())
+    with open("subject_image.png", "rb") as f:
+        image_list.append(f.read())
     
     return image_list
 

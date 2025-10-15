@@ -93,5 +93,5 @@ def get_segments(subject_url: str, clothes_url : str):
 
 if __name__ == "__main__":
     subject_url = 'https://res.cloudinary.com/dukgi26uv/image/upload/v1754043339/tryon-images/pnw39seevmetdc1mjmar.jpg'
-    clothes_url = 'https://res.cloudinary.com/dukgi26uv/image/upload/v1754143563/tryon-images/l4gx7uzvdz0ac6jqkrgn.webp'
+    clothes_url = 'https://res.cloudinary.com/dukgi26uv/image/upload/v1754043340/tryon-images/qeui9bhhkhkk4uh1636s.jpg'
     print(get_segments(subject_url , clothes_url))
