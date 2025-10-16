@@ -16,3 +16,4 @@ class GenerateConfig(BaseModel):
     redux_strength : float
     redux_strength_type : Union[Literal['multiply'], Literal['attn_bias']]
     ACE_scale : float
+    compile_repeated : bool = False
