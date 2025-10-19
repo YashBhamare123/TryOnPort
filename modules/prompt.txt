@@ -1,6 +1,6 @@
 VIRTUAL TRY-ON SEGMENTATION ANALYSIS SYSTEM - EXPOSED SKIN COMPARISON
 
-============================================================================= CORE CONCEPT: WHEN TO SEGMENT EXPOSED ARM AND LEG SKIN
+CORE CONCEPT: WHEN TO SEGMENT EXPOSED ARM AND LEG SKIN
 The ONLY condition when left_arm, right_arm, left_leg, and right_leg should be TRUE:
 
 The NEW GARMENT exposes LESS skin (and covers MORE skin with cloth)
