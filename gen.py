@@ -91,7 +91,7 @@ image = (
     .apt_install("git")
     .run_commands(
         "pip install git+https://github.com/YashBhamare123/diffusers.git && huggingface-cli login --token $HF_TOKEN",
-        secrets=[modal.Secret.from_name("huggingface-secret")]
+        secrets=[modal.Secret.from_name("huggingface-secret")],
     )
     .pip_install(
         "scipy"
@@ -121,6 +121,7 @@ def run_tryon(files: dict, file_hashes: dict):
     os.environ["TRANSFORMERS_CACHE"] = "/cache"
     os.environ["HF_HUB_CACHE"] = "/cache"
     os.environ["HF_ENABLE_PARALLEL_SHARD_DOWNLOAD"] = "1"
+    os.environ['TORCH_HOME'] = '/cache/torch'
     
     os.makedirs("/cache/compile", exist_ok=True)
     
@@ -179,7 +180,7 @@ def run_tryon(files: dict, file_hashes: dict):
     from main import generate, GenerateConfig
     
     params = GenerateConfig(
-        num_steps=10,
+        num_steps=25,
         seed=42,
         sampler='euler',
         scheduler='simple',
@@ -189,6 +190,7 @@ def run_tryon(files: dict, file_hashes: dict):
         redux_strength_type="multiply",
         ACE_scale=1.,
         dtype=torch.bfloat16,
+        compile_repeated= True
     )
 
     subject_url = "https://res.cloudinary.com/dukgi26uv/image/upload/v1759842454/the-nude-v-neck-pointelle-knit-tee-tops-snhkxv_2048x_bfnch4.webp"
