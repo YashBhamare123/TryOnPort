@@ -101,6 +101,7 @@ image = (
 @app.function(
     image=image,
     gpu="A100",
+    cpu = 1.0,
     timeout=600,
     volumes={
         "/cache": volume,

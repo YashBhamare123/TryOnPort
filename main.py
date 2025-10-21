@@ -3,23 +3,98 @@ import torch.nn.functional as F
 import time
 import joblib
 from diffusers import FluxFillPipeline, FluxPriorReduxPipeline, AutoencoderKL, FluxTransformer2DModel, FlowMatchEulerDiscreteScheduler
-from transformers import T5EncoderModel, CLIPTextModel, CLIPTokenizer, T5TokenizerFast
+from transformers import T5EncoderModel, CLIPTextModel, CLIPTokenizer, T5Tokenizer
 from diffusers.utils import load_image
 from huggingface_hub import hf_hub_download
 from torchvision.transforms import ToPILImage, ToTensor
 import torch.nn as nn
+from concurrent.futures import ProcessPoolExecutor
+import torch.multiprocessing
 
 from modules.image_pre import PreprocessImage, PreprocessConfig
 from sampling.utils import zero_out, apply_flux_guidance
 from sampling.apply_clip import run_clip
 from sampling.apply_style import load_style_model, apply_stylemodel, CLIPOutputWrapper
 from sampling.config import GenerateConfig
-<<<<<<< HEAD
-from Logo.detector import process_logo, deconcatenation
-=======
 from Logo.detector import process_logo, deconcatenation
 from sampling.teacache import teacache_forward
->>>>>>> 1dcf0ac93c80889bf2a6a0619de54d8bb97d5510
+
+
+def _load_components(input : dict):
+    pipeline = input['pipeline']
+    repo = input['repo']
+    subfolder = input['subfolder']
+    device = input['device']
+    dtype = input['dtype']
+    dtype_kwargs = {}
+    if dtype:
+        dtype_kwargs['torch_dtype'] = dtype
+
+    if subfolder in ['transformer', 'vae']:
+
+        if device:
+            model = pipeline.from_pretrained(repo, subfolder = subfolder, low_cpu_mem_usage=False, local_files_only=True, **dtype_kwargs).to(device)
+        else:
+            model = pipeline.from_pretrained(repo, subfolder = subfolder,low_cpu_mem_usage=False, local_files_only=True, **dtype_kwargs)
+        return {subfolder : model}
+    
+    else:
+        return {subfolder : None}
+def load_pipe_flux( device : str, dtype : torch.dtype) -> FluxFillPipeline:
+    components = [
+    {
+        'pipeline' : CLIPTokenizer,
+        'repo' : 'black-forest-labs/FLUX.1-Fill-dev',
+        'subfolder' : 'tokenizer',
+        'device' : None,
+        'dtype' : None
+    },
+    {
+        'pipeline' : T5Tokenizer,
+        'repo' : 'black-forest-labs/FLUX.1-Fill-dev',
+        'subfolder' : 'tokenizer_2',
+        'device' : None,
+        'dtype' : None
+    },
+    {
+        'pipeline' : AutoencoderKL,
+        'repo' : 'black-forest-labs/FLUX.1-Fill-dev',
+        'subfolder' : 'vae',
+        'device' : device,
+        'dtype' : dtype
+    },
+    {
+        'pipeline' : CLIPTextModel,
+        'repo' : 'black-forest-labs/FLUX.1-Fill-dev',
+        'subfolder' : 'text_encoder',
+        'device' : device,
+        'dtype' :dtype
+    },
+    {
+        'pipeline' : T5EncoderModel,
+        'repo' : 'black-forest-labs/FLUX.1-Fill-dev',
+        'subfolder' : 'text_encoder_2',
+        'device' : device,
+        'dtype' : dtype
+    },
+    {
+        'pipeline' : FluxTransformer2DModel,
+        'repo' : 'black-forest-labs/FLUX.1-Fill-dev',
+        'subfolder' : 'transformer',
+        'device' : device,
+        'dtype' : dtype
+    }
+]
+    out = {}
+    for component in components:
+        out.update(_load_components(component))
+    scheduler = FlowMatchEulerDiscreteScheduler() 
+    out.update({"scheduler" : scheduler})
+
+    pipe = FluxFillPipeline(**out).to(device)
+    return pipe
+    
+
 
 def generate(subject_url : str, garment_url : str, params : GenerateConfig):
 
@@ -41,15 +116,9 @@ def generate(subject_url : str, garment_url : str, params : GenerateConfig):
         # do_rescale = False
         ).to(params.device)
 
-    sampler = FlowMatchEulerDiscreteScheduler()
 
     start = time.perf_counter()
-    pipe = FluxFillPipeline.from_pretrained(
-        REPO_FLUX,
-        torch_dtype = params.dtype,
-        low_cpu_mem_usage=True,
-        # do_rescale = False
-        ).to(params.device)
+    pipe = load_pipe_flux(device = params.device, dtype = params.dtype)
     end = time.perf_counter()
 
     FluxTransformer2DModel.forward = teacache_forward
@@ -61,6 +130,7 @@ def generate(subject_url : str, garment_url : str, params : GenerateConfig):
     pipe.transformer.__class__.previous_modulated_input = None
     pipe.transformer.__class__.previous_residual = None
 
+    pipe.load_lora_weights(REPO_ACE, subfolder = REPO_ACE_SUB, weight_name = ACE_NAME)
 
     if params.compile_repeated:
         pipe.transformer.single_transformer_blocks = nn.ModuleList([
@@ -78,8 +148,6 @@ def generate(subject_url : str, garment_url : str, params : GenerateConfig):
         prompt_embeds_scale= params.redux_strength
     )
     
-    pipe.scheduler = sampler
-    # pipe.load_lora_weights(REPO_ACE, subfolder = REPO_ACE_SUB, filename = ACE_NAME)
     processor_config = PreprocessConfig(
         resized_height= 1024,
     )
@@ -103,14 +171,13 @@ def generate(subject_url : str, garment_url : str, params : GenerateConfig):
         generator = torch.Generator(params.device).manual_seed(params.seed),
         height = H,
         width = W,
-        # joint_attention_kwargs= {"scale" : params.ACE_scale},
+        joint_attention_kwargs= {"scale" : 0},
         cfg = params.CFG,
         **pipe_prior_output,
     ).images[0]
 
     out.save('subject_image.png')   
     out = ToTensor()(out)
-<<<<<<< HEAD
     gen_img, gar_img = processor.postprocess(out, subject_width)
     print("gen_img_shape:",gen_img.shape)
     print("gar_img.shape",gar_img.shape)
@@ -120,18 +187,10 @@ def generate(subject_url : str, garment_url : str, params : GenerateConfig):
     pil_gar = ToPILImage()(gar_img[0])
     pil_img.save('subject_image.png')
     pil_gar.save('mask_image.png')
-=======
-    # gen_img, gar_img = processor.postprocess(out, subject_width)
-    # pil_img = ToPILImage()(gen_img[0])
-    # pil_gar = ToPILImage()(gar_img[0])
-    # pil_img.save('subject_image.png')
-    # pil_gar.save('mask_image.png')
->>>>>>> 1dcf0ac93c80889bf2a6a0619de54d8bb97d5510
 
     # print(gen_img.size())
     # print(gar_img.size())
 
-<<<<<<< HEAD
     pixel_space, o_w, inpaint_mask, mm_bbox, logo_images = process_logo(gar_img, gen_img)
     print("pixel_space_dtype:",pixel_space.dtype)
     print("inpaint_mask_type:",inpaint_mask.dtype)
@@ -144,37 +203,23 @@ def generate(subject_url : str, garment_url : str, params : GenerateConfig):
         pipe_prior_logos = pipe_redux(img)
         logo_redux.append(pipe_prior_logos.prompt_embeds.squeeze(0))
         logo_embeds.append(pipe_prior_logos.pooled_prompt_embeds.squeeze(0))
-=======
-    # pixel_space, o_w, inpaint_mask, mm_bbox, logo_images = process_logo(gar_img[0], gen_img[0])
 
-    # list_size = logo_images.size()[0]
-    # logo_redux = []
-    # logo_embeds = []
-    # for i in range(list_size):
-    #     img = ToPILImage()(logo_images[i])
-    #     pipe_prior_logos = pipe_redux(img)
-    #     logo_redux.append(pipe_prior_logos.prompt_embeds.squeeze(0))
-    #     logo_embeds.append(pipe_prior_logos.pooled_prompt_embeds.squeeze(0))
->>>>>>> 1dcf0ac93c80889bf2a6a0619de54d8bb97d5510
+    pooled_prompt_embeds = torch.stack(logo_embeds, dim= 0)
+    prompt_embeds = torch.stack(logo_redux, dim = 0)
+    print(prompt_embeds.size())
+    print(pooled_prompt_embeds.size())
 
-    # pooled_prompt_embeds = torch.stack(logo_embeds, dim= 0)
-    # prompt_embeds = torch.stack(logo_redux, dim = 0)
-    # print(prompt_embeds.size())
-    # print(pooled_prompt_embeds.size())
+    prompt_embeds = prompt_embeds.to(device=params.device, dtype=params.dtype)
+    pooled_prompt_embeds = pooled_prompt_embeds.to(device=params.device, dtype=params.dtype)
 
-    # prompt_embeds = prompt_embeds.to(device=params.device, dtype=params.dtype)
-    # pooled_prompt_embeds = pooled_prompt_embeds.to(device=params.device, dtype=params.dtype)
-
-<<<<<<< HEAD
     pixel_space_pil = ToPILImage()(pixel_space[0].to(torch.float32))
     inpaint_mask_pil = ToPILImage()(inpaint_mask[0].to(torch.float32))
     pixel_space_pil.save('subject_image.png')
     inpaint_mask_pil.save('mask_image.png')
 
-    #pixel_space = pixel_space.to(device = params.device, dtype = params.dtype) / 255.
-    #inpaint_mask= inpaint_mask.to(device = params.device, dtype= params.dtype)
+    pixel_space = pixel_space.to(device = params.device, dtype = params.dtype) / 255.
+    inpaint_mask= inpaint_mask.to(device = params.device, dtype= params.dtype)
     
-    pipe.load_lora_weights(REPO_ACE, subfolder = REPO_ACE_SUB, weight_name = ACE_NAME)
     new_out = pipe(
         image = pixel_space,
         mask_image = inpaint_mask,
@@ -187,56 +232,23 @@ def generate(subject_url : str, garment_url : str, params : GenerateConfig):
         prompt_embeds= prompt_embeds,
         pooled_prompt_embeds= pooled_prompt_embeds,
     ).images
-=======
-    # pixel_space_pil = ToPILImage()(pixel_space[0])
-    # inpaint_mask_pil = ToPILImage()(inpaint_mask[0])
-    # pixel_space_pil.save('subject_image.png')
-    # inpaint_mask_pil.save('mask_image.png')
 
-    # pixel_space = pixel_space.to(device = params.device, dtype = params.dtype) / 255.
-    # inpaint_mask= inpaint_mask.to(device = params.device, dtype= params.dtype)
+    new_list = [ToTensor()(t) for t in new_out]
+    new_ts = torch.stack(new_list, dim = 0)
 
-    # # pipe.load_lora_weights(REPO_ACE, subfolder = REPO_ACE_SUB, weight_name = ACE_NAME)
-    # new_out = pipe(
-    #     image = pixel_space,
-    #     mask_image = inpaint_mask,
-    #     guidance_scale= params.flux_guidance,
-    #     num_inference_steps= params.num_steps,
-    #     strength = 1.,
-    #     generator = torch.Generator(params.device).manual_seed(params.seed),
-    #     # joint_attention_kwargs= {"scale" : params.ACE_scale},
-    #     cfg = params.CFG,
-    #     prompt_embeds= prompt_embeds,
-    #     pooled_prompt_embeds= pooled_prompt_embeds,
-    # ).images
->>>>>>> 1dcf0ac93c80889bf2a6a0619de54d8bb97d5510
+    new_ts = F.interpolate(
+        new_ts,
+        mode = 'bilinear',
+        size = pixel_space.size()[2:],
+        align_corners= False
+    )
 
-    # new_out[0].save("subject_image.png")
-    # new_list = [ToTensor()(t) for t in new_out]
-    # new_ts = torch.stack(new_list, dim = 0)
+    assert new_ts.size() == pixel_space.size(), f"{new_ts.size()} and {pixel_space.size()} do not match"
 
-    # new_ts = F.interpolate(
-    #     new_ts,
-    #     mode = 'bilinear',
-    #     size = pixel_space.size()[2:],
-    #     align_corners= False
-    # )
-
-    # assert new_ts.size() == pixel_space.size(), f"{new_ts.size()} and {pixel_space.size()} do not match"
-
-<<<<<<< HEAD
     pil_gen = ToPILImage()(gen_img[0])
-    pil_gen.save('mask_image.png')
     out = deconcatenation(gen_img, new_ts, o_w, mm_bbox, blend_amount= 0.0)
     out = ToPILImage()(out[0].to(torch.float32))
     out.save('output_fill_1.png')
-=======
-    # pil_gen = ToPILImage()(gen_img[0])
-    # pil_gen.save('mask_image.png')
-    # out = deconcatenation(gen_img[0], new_ts, o_w, mm_bbox, blend_amount= 0.0)
-    # out = ToPILImage()(out)
-    # out.save('output_fill_1.png')
->>>>>>> 1dcf0ac93c80889bf2a6a0619de54d8bb97d5510
     print("Saved Output")
 
 if __name__ == "__main__":
