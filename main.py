@@ -13,7 +13,7 @@ from sampling.utils import zero_out, apply_flux_guidance
 from sampling.apply_clip import run_clip
 from sampling.apply_style import load_style_model, apply_stylemodel, CLIPOutputWrapper
 from sampling.config import GenerateConfig
-from Logo.detector import process_logo, deconcatenation
+from Logo.new_detector import process_logo, deconcatenation
 
 def generate(subject_url : str, garment_url : str, params : GenerateConfig):
 
@@ -85,6 +85,10 @@ def generate(subject_url : str, garment_url : str, params : GenerateConfig):
         
     out = ToTensor()(out)
     gen_img, gar_img = processor.postprocess(out, subject_width)
+    print("gen_img_shape:",gen_img.shape)
+    print("gar_img.shape",gar_img.shape)
+    print(gar_img[0].shape)
+
     pil_img = ToPILImage()(gen_img[0])
     pil_gar = ToPILImage()(gar_img[0])
     pil_img.save('subject_image.png')
@@ -93,13 +97,15 @@ def generate(subject_url : str, garment_url : str, params : GenerateConfig):
     print(gen_img.size())
     print(gar_img.size())
 
-    pixel_space, o_w, inpaint_mask, mm_bbox, logo_images = process_logo(gar_img[0], gen_img[0])
+    pixel_space, o_w, inpaint_mask, mm_bbox, logo_images = process_logo(gar_img, gen_img)
+    print("pixel_space_dtype:",pixel_space.dtype)
+    print("inpaint_mask_type:",inpaint_mask.dtype)
 
     list_size = logo_images.size()[0]
     logo_redux = []
     logo_embeds = []
     for i in range(list_size):
-        img = ToPILImage()(logo_images[i])
+        img = ToPILImage()(logo_images[i].to(torch.float32))
         pipe_prior_logos = pipe_redux(img)
         logo_redux.append(pipe_prior_logos.prompt_embeds.squeeze(0))
         logo_embeds.append(pipe_prior_logos.pooled_prompt_embeds.squeeze(0))
@@ -112,14 +118,14 @@ def generate(subject_url : str, garment_url : str, params : GenerateConfig):
     prompt_embeds = prompt_embeds.to(device=params.device, dtype=params.dtype)
     pooled_prompt_embeds = pooled_prompt_embeds.to(device=params.device, dtype=params.dtype)
 
-    pixel_space_pil = ToPILImage()(pixel_space[0])
-    inpaint_mask_pil = ToPILImage()(inpaint_mask[0])
+    pixel_space_pil = ToPILImage()(pixel_space[0].to(torch.float32))
+    inpaint_mask_pil = ToPILImage()(inpaint_mask[0].to(torch.float32))
     pixel_space_pil.save('subject_image.png')
     inpaint_mask_pil.save('mask_image.png')
 
-    pixel_space = pixel_space.to(device = params.device, dtype = params.dtype) / 255.
-    inpaint_mask= inpaint_mask.to(device = params.device, dtype= params.dtype)
-
+    #pixel_space = pixel_space.to(device = params.device, dtype = params.dtype) / 255.
+    #inpaint_mask= inpaint_mask.to(device = params.device, dtype= params.dtype)
+    
     pipe.load_lora_weights(REPO_ACE, subfolder = REPO_ACE_SUB, weight_name = ACE_NAME)
     new_out = pipe(
         image = pixel_space,
@@ -149,8 +155,8 @@ def generate(subject_url : str, garment_url : str, params : GenerateConfig):
 
     pil_gen = ToPILImage()(gen_img[0])
     pil_gen.save('mask_image.png')
-    out = deconcatenation(gen_img[0], new_ts, o_w, mm_bbox, blend_amount= 0.0)
-    out = ToPILImage()(out)
+    out = deconcatenation(gen_img, new_ts, o_w, mm_bbox, blend_amount= 0.0)
+    out = ToPILImage()(out[0].to(torch.float32))
     out.save('output_fill_1.png')
     print("Saved Output")
 

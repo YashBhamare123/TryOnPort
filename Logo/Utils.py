@@ -3,7 +3,7 @@ import torch.nn.functional as F
 from PIL import Image
 import numpy as np
 from typing import List, Tuple
-
+from torchvision.transforms import ToPILImage, ToTensor
 def pil_to_tensorss(pil_image: Image.Image) -> torch.Tensor:
     """
     Converts a PIL Image to a PyTorch tensor.
@@ -169,30 +169,60 @@ def concatenate_masks_from_memory(masks_a: List[Image.Image], masks_b: List[Imag
 
     return final_batch_tensor, original_widths_a
 
-def deconcatenate_batch_horizontally(concatenated_images: List[Image.Image], original_widths_a: List[int]) -> Tuple[List[Image.Image], List[Image.Image]]:
-    """
-    Splits a list of horizontally concatenated images based on a list of original widths.
-    """
-    if len(concatenated_images) != len(original_widths_a):
-        raise ValueError("The 'concatenated_images' list and 'original_widths_a' list must have the same number of items.")
-
-    images_a = []
-    images_b = []
+def deconcatenate_horizontally(concatenated_images: List[Image.Image],original_widths_a: List[int]) -> Tuple[List[Image.Image], List[Image.Image]]:
     
-    for i in range(len(concatenated_images)):
-        img = concatenated_images[i]
-        width_a = original_widths_a[i]
-        
-        # --- Integrated logic from the single-image function ---
-        total_width, total_height = img.size
-        if width_a > total_width:
-            raise ValueError(f"Item {i}: The 'original_width_a' ({width_a}) cannot be greater than the total image width ({total_width}).")
-        
-        part_a = img.crop((0, 0, width_a, total_height))
-        part_b = img.crop((width_a, 0, total_width, total_height))
-        # --- End of integrated logic ---
+    if len(concatenated_images) == 0:
+        raise ValueError("deconcatenation function received no images")
 
-        images_a.append(part_a)
-        images_b.append(part_b)
-        
-    return images_a, images_b
+    # Convert PIL → tensor (C, H, W)
+    image_tensors = [ToTensor()(img) for img in concatenated_images]
+    images = torch.stack(image_tensors)
+    batch_size = images.shape[0]
+
+    # Convert split widths to tensor
+    o_W = torch.tensor(original_widths_a, dtype=torch.int, device=images.device)
+    print("o_W in deconcatenation function:", o_W)
+
+    output_a = []
+    output_b = []
+
+    for i in range(batch_size):
+        img = images[i]
+        split_point = min(int(o_W[i].item()), img.shape[2])  # clamp to valid range
+
+        # Split horizontally (along width)
+        img_a = img[:, :, :split_point]
+        img_b = img[:, :, split_point:]
+
+        # Skip invalid empty halves
+        if img_a.shape[2] == 0 or img_b.shape[2] == 0:
+            print(f"⚠️ Warning: empty split for image {i}, skipping")
+            continue
+
+        output_a.append(img_a)
+        output_b.append(img_b)
+
+    # Compute max width in each half
+    max_width_a = max(img.shape[2] for img in output_a)
+    max_width_b = max(img.shape[2] for img in output_b)
+
+    # Pad and convert back to PIL
+    to_pil = ToPILImage()
+    final_a: List[Image.Image] = []
+    final_b: List[Image.Image] = []
+
+    for img in output_a:
+        pad_total = max_width_a - img.shape[2]
+        pad_left = pad_total // 2
+        pad_right = pad_total - pad_left
+        padded = F.pad(img, (pad_left, pad_right), "constant", 0)
+        final_a.append(to_pil(padded.cpu().clamp(0, 1)))
+
+    for img in output_b:
+        pad_total = max_width_b - img.shape[2]
+        pad_left = pad_total // 2
+        pad_right = pad_total - pad_left
+        padded = F.pad(img, (pad_left, pad_right), "constant", 0)
+        final_b.append(to_pil(padded.cpu().clamp(0, 1)))
+
+    return final_a, final_b
