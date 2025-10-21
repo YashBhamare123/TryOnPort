@@ -136,6 +136,10 @@ Ask: What type is the new garment?
 STEP 3: Determine which SUBJECT components to segment (set to true)
 Based on what SUBJECT is wearing and what NEW GARMENT will replace:
 
+GENERAL RULE FOR LIMBS:
+- **If the new garment is a BOTTOM ONLY (pants/skirt), the arm arguments MUST be false.**
+- **If the new garment is a TOP ONLY, the leg arguments MUST be false.**
+
 RULE 1 - NEW GARMENT = TOP ONLY:
 Look at subject: Does subject have an upper_clothes component? YES
 → Segment subject's top: upper_clothes = true
@@ -145,7 +149,8 @@ RULE 2 - NEW GARMENT = PANTS/SHORTS:
 Look at subject: Does subject have a pants component? OR skirt component?
 → IF subject wears pants/shorts: Segment subject's pants → pants = true
 → IF subject wears skirt: Segment subject's skirt → skirt = true  
-→ Keep subject's top: upper_clothes = false, dress = false
+→ IF subject wears SEPARATES (upper_clothes + pants/shorts/skirt): Segment subject's pants → pants = true,
+→ Keep subject's top and dont segment arms: upper_clothes = false, dress = false, right_arm = false, left_arm = false
 
 RULE 3 - NEW GARMENT = SKIRT:
 Look at subject: Does subject have a pants component? OR skirt component?
@@ -206,13 +211,16 @@ NEW GARMENT: {garment_desc}
 
 Determine left_arm and right_arm boolean values using this logic:
 
+**OVERRIDE RULE: If the NEW GARMENT is a bottom-only piece (e.g., pants, shorts, skirt), then left_arm and right_arm MUST be false. The CORE RULE below only applies if the new garment covers the torso.**
+
 CORE RULE: Set to TRUE only if:
 1. New garment exposes LESS arm skin than subject (covers MORE)
 2. AND sleeve types are NOT similar
 
 Set to FALSE if:
-- New garment exposes SAME or MORE arm skin
-- Sleeve types are similar (both short-sleeve, both long-sleeve, etc.)
+- The OVERRIDE RULE applies.
+- New garment exposes SAME or MORE arm skin.
+- Sleeve types are similar (both short-sleeve, both long-sleeve, etc.).
 
 Reference points for exposure:
 - Fingertips = 0% exposed (100% covered)
@@ -223,18 +231,19 @@ Reference points for exposure:
 - Shoulder = 100% exposed (sleeveless)
 
 Think step by step:
-1. Identify where subject's sleeve ends and % arm exposed
-2. Identify where new garment's sleeve ends and % arm exposed
-3. Compare: Is new garment % LESS than subject %?
-4. Check: Are sleeve types similar?
-5. Decide: TRUE only if new exposes LESS AND types NOT similar
+1. First, check the OVERRIDE RULE. Is the new garment a bottom? If yes, set arms to false and stop.
+2. If not, identify where subject's sleeve ends and % arm exposed.
+3. Identify where new garment's sleeve ends and % arm exposed.
+4. Compare: Is new garment % LESS than subject %?
+5. Check: Are sleeve types similar?
+6. Decide: TRUE only if new exposes LESS AND types NOT similar.
 
 Return JSON:
 {{
     "subject_arm_exposure_percent": number,
     "garment_arm_exposure_percent": number,
     "sleeve_types_similar": true/false,
-    "reasoning": "brief explanation",
+    "reasoning": "brief explanation, mentioning the override rule if used",
     "left_arm": true/false,
     "right_arm": true/false
 }}"""
@@ -259,13 +268,16 @@ NEW GARMENT: {garment_desc}
 
 Determine left_leg and right_leg boolean values using this logic:
 
+**OVERRIDE RULE: If the NEW GARMENT is a top-only piece (e.g., t-shirt, hoodie, blouse), then left_leg and right_leg MUST be false. The CORE RULE below only applies if the new garment is a bottom or one-piece.**
+
 CORE RULE: Set to TRUE only if:
 1. New garment exposes LESS leg skin than subject (covers MORE)
 2. AND lower garment types are NOT similar
 
 Set to FALSE if:
-- New garment exposes SAME or MORE leg skin
-- Lower garment types are similar (both shorts, both full-length pants, both midi skirts, etc.)
+- The OVERRIDE RULE applies.
+- New garment exposes SAME or MORE leg skin.
+- Lower garment types are similar (both shorts, both full-length pants, etc.).
 
 Reference points for exposure:
 - Toes = 0% exposed (100% covered)
@@ -277,18 +289,19 @@ Reference points for exposure:
 - Hip = 100% exposed
 
 Think step by step:
-1. Identify where subject's lower garment ends and % leg exposed
-2. Identify where new garment ends and % leg exposed
-3. Compare: Is new garment % LESS than subject %?
-4. Check: Are lower garment types similar?
-5. Decide: TRUE only if new exposes LESS AND types NOT similar
+1. First, check the OVERRIDE RULE. Is the new garment a top? If yes, set legs to false and stop.
+2. If not, identify where subject's lower garment ends and % leg exposed.
+3. Identify where new garment ends and % leg exposed.
+4. Compare: Is new garment % LESS than subject %?
+5. Check: Are lower garment types similar?
+6. Decide: TRUE only if new exposes LESS AND types NOT similar.
 
 Return JSON:
 {{
     "subject_leg_exposure_percent": number,
     "garment_leg_exposure_percent": number,
     "garment_types_similar": true/false,
-    "reasoning": "brief explanation",
+    "reasoning": "brief explanation, mentioning the override rule if used",
     "left_leg": true/false,
     "right_leg": true/false
 }}"""
@@ -433,6 +446,6 @@ def get_segments(subject_url: str, clothes_url: str):
     }
 
 if __name__ == "__main__":
-    subject_url = 'https://res.cloudinary.com/dukgi26uv/image/upload/v1754042621/tryon-images/bfyaeidpfatlopcew5oq.jpg'
-    clothes_url = 'https://res.cloudinary.com/dukgi26uv/image/upload/v1754041809/tryon-images/l3rn0clggfbgr3mmfzp0.webp'
+    subject_url = 'https://res.cloudinary.com/dukgi26uv/image/upload/v1761044493/images_3_cpj0vc.jpg'
+    clothes_url = 'https://res.cloudinary.com/dukgi26uv/image/upload/v1761044493/51-M1KDRJsL._AC_UY1100__hyr2fb.jpg'
     print(json.dumps(get_segments(subject_url, clothes_url), indent=2))
