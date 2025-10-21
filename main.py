@@ -15,7 +15,7 @@ from sampling.apply_clip import run_clip
 from sampling.apply_style import load_style_model, apply_stylemodel, CLIPOutputWrapper
 from sampling.config import GenerateConfig
 <<<<<<< HEAD
-from Logo.new_detector import process_logo, deconcatenation
+from Logo.detector import process_logo, deconcatenation
 =======
 from Logo.detector import process_logo, deconcatenation
 from sampling.teacache import teacache_forward
