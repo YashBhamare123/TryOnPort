@@ -11,7 +11,7 @@ import torch.nn as nn
 from concurrent.futures import ProcessPoolExecutor
 import torch.multiprocessing
 
-from modules.image_pre import PreprocessImage, PreprocessConfig
+from modules.image_pre import PreprocessImage, PreprocessConfig, resize_image
 from sampling.utils import zero_out, apply_flux_guidance
 from sampling.apply_clip import run_clip
 from sampling.apply_style import load_style_model, apply_stylemodel, CLIPOutputWrapper
@@ -125,7 +125,7 @@ def generate(subject_url : str, garment_url : str, params : GenerateConfig):
     pipe.transformer.__class__.enable_teacache = True
     pipe.transformer.__class__.cnt = 0
     pipe.transformer.__class__.num_steps = params.num_steps
-    pipe.transformer.__class__.rel_l1_thresh = 0.4 # 0.25 for 1.5x speedup, 0.4 for 1.8x speedup, 0.6 for 2.0x speedup, 0.8 for 2.25x speedup
+    pipe.transformer.__class__.rel_l1_thresh = 0.1 # 0.25 for 1.5x speedup, 0.4 for 1.8x speedup, 0.6 for 2.0x speedup, 0.8 for 2.25x speedup
     pipe.transformer.__class__.accumulated_rel_l1_distance = 0
     pipe.transformer.__class__.previous_modulated_input = None
     pipe.transformer.__class__.previous_residual = None
@@ -177,9 +177,11 @@ def generate(subject_url : str, garment_url : str, params : GenerateConfig):
     ).images[0]
 
     out.save('subject_image.png')   
-    out = ToTensor()(out)
-    gen_img, gar_img = processor.postprocess(out, subject_width)
+    out_ts = ToTensor()(out)
+    gen_img, gar_img = processor.postprocess(out_ts, subject_width)
     print("gen_img_shape:",gen_img.shape)
+    out = gen_img
+    gar_img = resize_image(ToTensor()(garment_img).unsqueeze(0), h = 1024)
     print("gar_img.shape",gar_img.shape)
     print(gar_img[0].shape)
 
@@ -200,22 +202,25 @@ def generate(subject_url : str, garment_url : str, params : GenerateConfig):
     logo_embeds = []
     for i in range(list_size):
         img = ToPILImage()(logo_images[i].to(torch.float32))
-        pipe_prior_logos = pipe_redux(img)
+        pipe_prior_logos = pipe_redux(
+            img,
+            prompt_embeds_scale = 0.4)
         logo_redux.append(pipe_prior_logos.prompt_embeds.squeeze(0))
         logo_embeds.append(pipe_prior_logos.pooled_prompt_embeds.squeeze(0))
 
-    pooled_prompt_embeds = torch.stack(logo_embeds, dim= 0)
-    prompt_embeds = torch.stack(logo_redux, dim = 0)
-    print(prompt_embeds.size())
-    print(pooled_prompt_embeds.size())
+    if logo_embeds:
+        pooled_prompt_embeds = torch.stack(logo_embeds, dim= 0)
+        prompt_embeds = torch.stack(logo_redux, dim = 0)
+        print(prompt_embeds.size())
+        print(pooled_prompt_embeds.size())
 
-    prompt_embeds = prompt_embeds.to(device=params.device, dtype=params.dtype)
-    pooled_prompt_embeds = pooled_prompt_embeds.to(device=params.device, dtype=params.dtype)
+        prompt_embeds = prompt_embeds.to(device=params.device, dtype=params.dtype)
+        pooled_prompt_embeds = pooled_prompt_embeds.to(device=params.device, dtype=params.dtype)
 
-    pixel_space_pil = ToPILImage()(pixel_space[0].to(torch.float32))
-    inpaint_mask_pil = ToPILImage()(inpaint_mask[0].to(torch.float32))
-    pixel_space_pil.save('subject_image.png')
-    inpaint_mask_pil.save('mask_image.png')
+        pixel_space_pil = ToPILImage()(pixel_space[0].to(torch.float32))
+        inpaint_mask_pil = ToPILImage()(inpaint_mask[0].to(torch.float32))
+        pixel_space_pil.save('subject_image.png')
+        inpaint_mask_pil.save('mask_image.png')
 
     #pixel_space = pixel_space.to(device = params.device, dtype = params.dtype) / 255.
     #inpaint_mask= inpaint_mask.to(device = params.device, dtype= params.dtype)
@@ -266,7 +271,7 @@ if __name__ == "__main__":
         CFG = 1.,
         redux_strength= 0.4,
         redux_strength_type= "multiply",
-        ACE_scale= 0.,
+        ACE_scale= 1.,
         dtype = torch.bfloat16,
     )
 

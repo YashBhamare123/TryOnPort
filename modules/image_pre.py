@@ -126,7 +126,7 @@ def grow_and_blur_mask(mask : torch.Tensor, padding= 0):
     Grows a mask using max pooling and applies Gaussian blur for smooth edges.
     
     Args:
-        mask (torch.Tensor): Input binary mask tensor.
+        mask (torch.Tensor : (B C H W)): Input binary mask tensor.
         padding (int, optional): Amount to grow the mask. Defaults to 0.
     
     Returns:

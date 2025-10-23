@@ -94,13 +94,14 @@ image = (
         secrets=[modal.Secret.from_name("huggingface-secret")],
     )
     .pip_install(
-        "scipy"
+        "scipy",
+        "langgraph"
     )
 )
 
 @app.function(
     image=image,
-    gpu="A100",
+    gpu="H100",
     cpu = 1.0,
     timeout=600,
     volumes={
@@ -194,8 +195,8 @@ def run_tryon(files: dict, file_hashes: dict):
         compile_repeated= True
     )
 
-    subject_url = "https://res.cloudinary.com/dukgi26uv/image/upload/v1759842454/the-nude-v-neck-pointelle-knit-tee-tops-snhkxv_2048x_bfnch4.webp"
-    garment_url = "https://res.cloudinary.com/dukgi26uv/image/upload/v1759842480/Manchester_United_Home_92.94_Shirt_kyajol.webp"
+    subject_url = "https://res.cloudinary.com/dukgi26uv/image/upload/v1754048729/tryon-images/hwwfogzsgwd89ku1fcxb.jpg"
+    garment_url = "https://res.cloudinary.com/dukgi26uv/image/upload/v1754049295/tryon-images/eolbdlvxmn5dvxwetvhp.webp"
 
     generate(subject_url, garment_url, params)
     
