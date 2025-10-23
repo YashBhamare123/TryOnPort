@@ -2,7 +2,7 @@
 import torch
 from typing import List, Tuple
 from Logo.similarity_test import ImageMatcher
-from Logo.Logo_detection import ProperLogo
+from Logo.logo_detection import ProperLogo
 from Logo.pasting import ImagePaster
 from Logo.Utils import deconcatenate_tensors, concatenate_tensors
 from torchvision.transforms import ToPILImage
@@ -135,7 +135,8 @@ def deconcatenation(
     if input_tensor.ndim != 4:
         raise ValueError(
             f"Input tensor must be a 4D batch tensor (B, C, H, W), but got shape {input_tensor.shape}.")
-
+    for i, img in enumerate(input_tensor):
+        ToPILImage()(img.to(torch.float32)).save(f"deconcatenation_logo{i}.png")
     # Split the processed tensor back into the reference and the modified logo parts
     _, logo_tensors = deconcatenate_tensors(
         concatenated_tensor=input_tensor, original_widths_a=original_width_a

@@ -217,8 +217,8 @@ def generate(subject_url : str, garment_url : str, params : GenerateConfig):
     pixel_space_pil.save('subject_image.png')
     inpaint_mask_pil.save('mask_image.png')
 
-    pixel_space = pixel_space.to(device = params.device, dtype = params.dtype) / 255.
-    inpaint_mask= inpaint_mask.to(device = params.device, dtype= params.dtype)
+    #pixel_space = pixel_space.to(device = params.device, dtype = params.dtype) / 255.
+    #inpaint_mask= inpaint_mask.to(device = params.device, dtype= params.dtype)
     
     new_out = pipe(
         image = pixel_space,
@@ -235,6 +235,11 @@ def generate(subject_url : str, garment_url : str, params : GenerateConfig):
 
     new_list = [ToTensor()(t) for t in new_out]
     new_ts = torch.stack(new_list, dim = 0)
+    print("new_ts_type:",type(new_ts))
+    print("new_ts_dtype:",new_ts.dtype)
+    print("new_ts_shape:",new_ts.shape)
+    for i, img in enumerate(new_ts):
+        ToPILImage()(img.to(torch.float32)).save(f"new_ts_{i}.png")
 
     new_ts = F.interpolate(
         new_ts,
