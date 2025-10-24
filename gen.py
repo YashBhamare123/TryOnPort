@@ -186,17 +186,17 @@ def run_tryon(files: dict, file_hashes: dict):
         seed=42,
         sampler='euler',
         scheduler='simple',
-        flux_guidance=30,
+        flux_guidance=40,
         CFG=1.,
-        redux_strength=0.4,
+        redux_strength=0.7,
         redux_strength_type="multiply",
         ACE_scale=1.,
         dtype=torch.bfloat16,
         compile_repeated= True
     )
 
-    subject_url = "https://res.cloudinary.com/dukgi26uv/image/upload/v1754048729/tryon-images/hwwfogzsgwd89ku1fcxb.jpg"
-    garment_url = "https://res.cloudinary.com/dukgi26uv/image/upload/v1754049295/tryon-images/eolbdlvxmn5dvxwetvhp.webp"
+    subject_url = "https://res.cloudinary.com/dukgi26uv/image/upload/v1754050691/tryon-images/oilbuvqjvnvmgnjzujgl.jpg"
+    garment_url = "https://res.cloudinary.com/dukgi26uv/image/upload/v1754050692/tryon-images/vrce3ip9irr8ehv4cto0.jpg"
 
     generate(subject_url, garment_url, params)
     

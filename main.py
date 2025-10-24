@@ -225,38 +225,39 @@ def generate(subject_url : str, garment_url : str, params : GenerateConfig):
     #pixel_space = pixel_space.to(device = params.device, dtype = params.dtype) / 255.
     #inpaint_mask= inpaint_mask.to(device = params.device, dtype= params.dtype)
     
-    new_out = pipe(
-        image = pixel_space,
-        mask_image = inpaint_mask,
-        guidance_scale= params.flux_guidance,
-        num_inference_steps= params.num_steps,
-        strength = 1.,
-        generator = torch.Generator(params.device).manual_seed(params.seed),
-        joint_attention_kwargs= {"scale" : params.ACE_scale},
-        cfg = params.CFG,
-        prompt_embeds= prompt_embeds,
-        pooled_prompt_embeds= pooled_prompt_embeds,
-    ).images
+        new_out = pipe(
+            image = pixel_space,
+            mask_image = inpaint_mask,
+            guidance_scale= params.flux_guidance,
+            num_inference_steps= params.num_steps,
+            strength = 1.,
+            generator = torch.Generator(params.device).manual_seed(params.seed),
+            joint_attention_kwargs= {"scale" : params.ACE_scale},
+            cfg = params.CFG,
+            prompt_embeds= prompt_embeds,
+            pooled_prompt_embeds= pooled_prompt_embeds,
+        ).images
 
-    new_list = [ToTensor()(t) for t in new_out]
-    new_ts = torch.stack(new_list, dim = 0)
-    print("new_ts_type:",type(new_ts))
-    print("new_ts_dtype:",new_ts.dtype)
-    print("new_ts_shape:",new_ts.shape)
-    for i, img in enumerate(new_ts):
-        ToPILImage()(img.to(torch.float32)).save(f"new_ts_{i}.png")
+        new_list = [ToTensor()(t) for t in new_out]
+        new_ts = torch.stack(new_list, dim = 0)
+        print("new_ts_type:",type(new_ts))
+        print("new_ts_dtype:",new_ts.dtype)
+        print("new_ts_shape:",new_ts.shape)
+        for i, img in enumerate(new_ts):
+            ToPILImage()(img.to(torch.float32)).save(f"new_ts_{i}.png")
 
-    new_ts = F.interpolate(
-        new_ts,
-        mode = 'bilinear',
-        size = pixel_space.size()[2:],
-        align_corners= False
-    )
+        new_ts = F.interpolate(
+            new_ts,
+            mode = 'bilinear',
+            size = pixel_space.size()[2:],
+            align_corners= False
+        )
 
-    assert new_ts.size() == pixel_space.size(), f"{new_ts.size()} and {pixel_space.size()} do not match"
+        assert new_ts.size() == pixel_space.size(), f"{new_ts.size()} and {pixel_space.size()} do not match"
 
-    pil_gen = ToPILImage()(gen_img[0])
-    out = deconcatenation(gen_img, new_ts, o_w, mm_bbox, blend_amount= 0.0)
+        pil_gen = ToPILImage()(gen_img[0])
+        out = deconcatenation(gen_img, new_ts, o_w, mm_bbox, blend_amount= 0.0)
+
     out = ToPILImage()(out[0].to(torch.float32))
     out.save('output_fill_1.png')
     print("Saved Output")

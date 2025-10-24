@@ -1,7 +1,7 @@
 import torch
 from typing import List, Tuple
 from Logo.similarity_test import ImageMatcher
-from Logo.logo_detection import ProperLogo
+from Logo.Logo_detection import ProperLogo
 from Logo.pasting import ImagePaster
 from Logo.Utils import deconcatenate_tensors, concatenate_tensors
 from torchvision.transforms import ToPILImage
