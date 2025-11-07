@@ -1,5 +1,6 @@
 from groq import Groq
 import os
+from io import BytesIO
 from dotenv import load_dotenv
 from pydantic import BaseModel
 import json
@@ -9,17 +10,28 @@ import requests
 from typing import TypedDict, Annotated
 from langgraph.graph import StateGraph, END
 import operator
-
+from PIL import Image
+import PIL
+from io import BytesIO
 load_dotenv()
 
-def get_uri(image_url: str):
-    response = requests.get(image_url)
-    response.raise_for_status()
-    image_bytes = response.content
+def get_uri(image: str | Image.Image):
+    if isinstance(image, str):
+        response = requests.get(image)
+        response.raise_for_status()
+        image_bytes = response.content
+        image_ext, _ = mimetypes.guess_type(image)
+
+    elif isinstance(image, Image.Image):
+        buffer = BytesIO()
+        image.save(buffer, format= 'PNG')
+        image_bytes = buffer.getvalue()
+        image_ext = 'image/png'
+
     image_encoded = base64.b64encode(image_bytes).decode('utf-8')
-    image_ext, _ = mimetypes.guess_type(image_url)
     data_uri = f"data:{image_ext};base64,{image_encoded}" 
     return data_uri
+
 
 class State(TypedDict):
     subject_url: str
@@ -405,14 +417,14 @@ def build_graph(client: Groq):
     
     return workflow.compile()
 
-def get_segments(subject_url: str, clothes_url: str):
+def get_segments(subject_img, clothes_img):
     client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
     
     graph = build_graph(client)
     
     initial_state = {
-        "subject_url": subject_url,
-        "clothes_url": clothes_url,
+        "subject_url": subject_img,
+        "clothes_url": clothes_img,
         "subject_description": "",
         "garment_description": "",
         "subject_clothes_type": "",

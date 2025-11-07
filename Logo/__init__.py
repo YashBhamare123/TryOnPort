@@ -1,1 +1,1 @@
-import Logo.detector, Logo.Logo_detection, Logo.pasting, Logo.similarity_test
+import logo.detector, logo.processing, logo.pasting, logo.similarity

@@ -1,14 +1,10 @@
 import modal
 from pathlib import Path
-import os
-import hashlib
-import json
 
 app = modal.App("tryon-inference")
 
 volume = modal.Volume.from_name("huggingface-cache", create_if_missing=True)
 
-# Add a volume for tracking file hashes
 files_volume = modal.Volume.from_name("tryon-files", create_if_missing=True)
 
 image = (
@@ -97,12 +93,19 @@ image = (
         "scipy",
         "langgraph"
     )
+    .add_local_dir(
+        local_path= '.',
+        remote_path= '/root/files',
+        ignore=[
+        ".*",        
+        "**/.*",     
+    ],
+    )
 )
 
 @app.function(
     image=image,
-    gpu="H100",
-    cpu = 1.0,
+    gpu="A100",
     timeout=600,
     volumes={
         "/cache": volume,
@@ -113,11 +116,9 @@ image = (
         modal.Secret.from_name("groq-secret"),
     ],
 )
-def run_tryon(files: dict, file_hashes: dict):
+def run_tryon():
     import os
     import sys
-    import importlib.util
-    import json
     
     os.environ["HF_HOME"] = "/cache"
     os.environ["TRANSFORMERS_CACHE"] = "/cache"
@@ -126,144 +127,39 @@ def run_tryon(files: dict, file_hashes: dict):
     os.environ['TORCH_HOME'] = '/cache/torch'
     
     os.makedirs("/cache/compile", exist_ok=True)
-    
-    # Load previous hashes
-    hash_file = "/files/file_hashes.json"
-    previous_hashes = {}
-    if os.path.exists(hash_file):
-        with open(hash_file, "r") as f:
-            previous_hashes = json.load(f)
-    
-    # Write only changed files
-    files_written = 0
-    files_skipped = 0
-    for filename, content in files.items():
-        current_hash = file_hashes[filename]
-        
-        # Check if file needs updating
-        if filename in previous_hashes and previous_hashes[filename] == current_hash:
-            if os.path.exists(f"/files/{filename}"):
-                files_skipped += 1
-                continue
-        
-        print(f"Writing {filename}...")
-        files_written += 1
-        
-        # Write to /files volume
-        directory = os.path.dirname(f"/files/{filename}")
-        if directory:
-            os.makedirs(directory, exist_ok=True)
-        
-        with open(f"/files/{filename}", "w") as f:
-            f.write(content)
-    
-    print(f"Files written: {files_written}, skipped: {files_skipped}")
-    
-    # Save current hashes
-    with open(hash_file, "w") as f:
-        json.dump(file_hashes, f)
-    
-    files_volume.commit()
-    
-    # Change to /files directory to run the code
-    os.chdir("/files")
-    
-    # Add /files to Python path so imports work
-    sys.path.insert(0, "/files")
-    
-    spec = importlib.util.spec_from_file_location("main", "/files/main.py")
-    main_module = importlib.util.module_from_spec(spec)
-    sys.modules["main"] = main_module
-    spec.loader.exec_module(main_module)
-    
-    print("Running generate() from main.py...")
-    
+    sys.path.insert(0, "/root/files")
+
     import torch
-    from main import generate, GenerateConfig
+    from main import TryOnPipeline, GenerateConfig
     
     params = GenerateConfig(
-        num_steps=25,
+        num_steps=10,
+        num_steps_logo= 10,
         seed=42,
         sampler='euler',
-        scheduler='simple',
         flux_guidance=40,
         CFG=1.,
         redux_strength=0.7,
-        redux_strength_type="multiply",
+        logo_redux_strength= 0.7,
         ACE_scale=1.,
         dtype=torch.bfloat16,
         compile_repeated= True
     )
 
-    subject_url = "https://res.cloudinary.com/dukgi26uv/image/upload/v1754050691/tryon-images/oilbuvqjvnvmgnjzujgl.jpg"
-    garment_url = "https://res.cloudinary.com/dukgi26uv/image/upload/v1754050692/tryon-images/vrce3ip9irr8ehv4cto0.jpg"
+    subject_url = "https://res.cloudinary.com/dukgi26uv/image/upload/v1754049601/tryon-images/fx3mo7u3n0i42tcod9qv.jpg"
+    garment_url = "https://res.cloudinary.com/dukgi26uv/image/upload/v1759842480/Manchester_United_Home_92.94_Shirt_kyajol.webp"
 
-    generate(subject_url, garment_url, params)
-    
-    image_list = []
-    with open("output_fill_1.png", "rb") as f:
-        image_list.append(f.read())
-    with open("mask_image.png", "rb") as f:
-        image_list.append(f.read())
-    with open("subject_image.png", "rb") as f:
-        image_list.append(f.read())
-    
-    return image_list
+    pipe = TryOnPipeline(params)
+    out = pipe(subject_url, garment_url)
+    return out
 
-def compute_file_hash(filepath):
-    """Compute MD5 hash of a file."""
-    hasher = hashlib.md5()
-    with open(filepath, "rb") as f:
-        hasher.update(f.read())
-    return hasher.hexdigest()
 
 @app.local_entrypoint()
 def main():
-    import glob
+    image_bytes_list = run_tryon.remote()
     
-    print("Starting TryOn on Modal...")
-    
-    files = {}
-    file_hashes = {}
-    
-    # Include Python files
-    for py_file in glob.glob("**/*.py", recursive=True):
-        if py_file == "modal_inference.py" or py_file == os.path.basename(__file__):
-            continue
-        
-        if "__pycache__" in py_file or "/." in py_file or py_file.startswith("."):
-            continue
+    for idx, img in enumerate(image_bytes_list):
+        img.save(f'output_{idx}.png')
             
-        with open(py_file, "r", encoding="utf-8") as f:
-            content = f.read()
-            files[py_file] = content
-            file_hashes[py_file] = hashlib.md5(content.encode()).hexdigest()
-        print(f"Including {py_file}")
-    
-    # Include other files (txt, json, etc.)
-    for pattern in ["**/*.txt", "**/*.json", "**/*.yaml", "**/*.yml"]:
-        for file_path in glob.glob(pattern, recursive=True):
-            if "__pycache__" in file_path or "/." in file_path or file_path.startswith("."):
-                continue
-            
-            try:
-                with open(file_path, "r") as f:
-                    content = f.read()
-                    files[file_path] = content
-                    file_hashes[file_path] = hashlib.md5(content.encode()).hexdigest()
-                print(f"Including {file_path}")
-            except Exception as e:
-                print(f"Skipping {file_path}: {e}")
-    
-    if not files:
-        print("Warning: No files found!")
-    else:
-        print(f"Total files tracked: {len(files)}")
-    
-    image_bytes_list = run_tryon.remote(files, file_hashes)
-    
-    for idx, img_bytes in enumerate(image_bytes_list):
-        with open(f"output_{idx}.png", "wb") as f:
-            f.write(img_bytes)
     
     print("Images saved as output_*.png")

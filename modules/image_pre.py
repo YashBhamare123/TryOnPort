@@ -142,6 +142,19 @@ class PreprocessImage:
         self.params = params
     
     def preprocess(self, subject_url : str, garment_url : str):
+        """
+        Loads, resizes, segments, and concatenates subject and garment images for inpainting.
+
+        Args:
+            subject_url (str): URL of the subject/person image
+            garment_url (str): URL of the garment image
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor, int]:
+                - inpaint_img (torch.Tensor): Shape (B, C, H*, W*) - horizontally concatenated images
+                - inpaint_mask (torch.Tensor): Shape (B, 1, H*, W*) - subject mask + blank garment mask
+                - sub_width (int): Width of subject portion for splitting
+        """
         sub = load_image_from_url(subject_url)
         sub_img = sub[0]
 
@@ -154,12 +167,20 @@ class PreprocessImage:
         gar_img = resize_image(gar_img, self.params.resized_height, self.params.resized_width, self.params.keep_ratio, self.params.resize_mode)
 
         # show_tensor(sub_img, 'after resize')
+        sub_img_pil = ToPILImage()(sub_img[0])
+        gar_img_pil= ToPILImage()(gar_img[0])
 
-        inputs = get_segments(subject_url, garment_url)
+        inputs = get_segments(sub_img_pil, gar_img_pil)
         print(inputs)
         labels_sub = SegmentCategories(**inputs)
         if labels_sub.upper_clothes or labels_sub.dress:
             labels_sub.lower_neck = True
+        
+        if labels_sub.upper_clothes:
+            labels_sub.dress = True
+        
+        if labels_sub.dress:
+            labels_sub.upper_clothes = True
 
         labels_gar = FashionLabels(unlabelled= False)
 
@@ -222,8 +243,19 @@ class PreprocessImage:
 
         return inpaint_img, inpaint_mask, sub_width
 
-    def postprocess(self, inpaint_img : torch.Tensor, subject_width : int):
-        inpaint_img = inpaint_img.unsqueeze(0)
+    def split(self, inpaint_img : torch.Tensor, subject_width : int):
+        """
+        Splits concatenated inpainted image back into subject and garment components.
+
+        Args:
+            inpaint_img (torch.Tensor): Shape (B, C, H, W_total) - processed concatenated image
+            subject_width (int): Width of subject portion for splitting
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor]:
+                - img (torch.Tensor): Shape (B, C, H, subject_width) - subject portion
+                - garment (torch.Tensor): Shape (B, C, H, W_garment) - garment portion
+        """
         img = inpaint_img[:, :, :, :subject_width]
         garment = inpaint_img[:, :, :, subject_width:]
         return img, garment

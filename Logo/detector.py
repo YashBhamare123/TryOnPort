@@ -1,9 +1,9 @@
 import torch
 from typing import List, Tuple
-from Logo.similarity_test import ImageMatcher
-from Logo.logo_detection import ProperLogo
-from Logo.pasting import ImagePaster
-from Logo.Utils import deconcatenate_tensors, concatenate_tensors
+from logo.similarity import ImageMatcher
+from logo.processing import ProperLogo
+from logo.pasting import ImagePaster
+from logo.utils import deconcatenate_tensors, concatenate_tensors
 from torchvision.transforms import ToPILImage
 from modules.image_pre import grow_and_blur_mask
 # Initialize the main components of the logo processing pipeline.
@@ -90,6 +90,7 @@ def process_logo(
     print("match_ref_images",len(match_ref_images))
     print("match_images",len(match_images))
     print("candidate_masks",len(matched_masks))
+
     # Concatenate the matched image pairs and mask pairs into single tensors
     pixel_space, original_widths = concatenate_tensors(
         match_ref_images, match_images)
@@ -99,7 +100,7 @@ def process_logo(
         match_ref_blank_masks, matched_masks)
     for i, img in enumerate(inpaint_mask_input):
         ToPILImage()(img.to(torch.float32)).save(f"inpaint_mask{i}.png")
-    inpaint_mask_input = grow_and_blur_mask(inpaint_mask_input, padding = 70)
+    inpaint_mask_input = grow_and_blur_mask(inpaint_mask_input, padding = 40)
     
     return pixel_space, original_widths, inpaint_mask_input, matched_bounding_boxes, match_ref_images
 
