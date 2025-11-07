@@ -197,7 +197,6 @@ class TryOnPipeline:
         image, o_w, mask, mm_bbox, logo_images = process_logo(gar_img, gen_img)
         num_logos = logo_images.size()[0]
 
-        num_logos = None
         if num_logos:
             redux_embeds_logo_prompt = []
             redux_embeds_logo_pooled = []
