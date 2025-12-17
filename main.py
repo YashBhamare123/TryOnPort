@@ -145,8 +145,8 @@ class TryOnPipeline:
             if image.min() < 0:
                  image = (image / 2 + 0.5).clamp(0, 1)
             image = image.clamp(0, 1)
-            image = image.to(dtype=torch.bfloat16)
-            
+            image = image.to(dtype=torch.float32)
+
             out = ToPILImage()(image)
             return out
 
