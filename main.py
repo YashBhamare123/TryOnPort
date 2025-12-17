@@ -15,14 +15,12 @@ from sampling.config import GenerateConfig
 from logo.detector import process_logo, deconcatenation
 from sampling.teacache import teacache_forward
 
-
 class TryOnPipeline:
     REPO_REDUX_HF = "black-forest-labs/FLUX.1-Redux-dev"
     REPO_ACE = "ali-vilab/ACE_Plus"
     REPO_ACE_SUB = "subject"
     ACE_NAME = "comfyui_subject_lora16.safetensors"
 
-    
     def __init__(self, params : GenerateConfig):
         self.params = params
         self.flux_pipe = self.load_flux_with_modules(self._load_pipe_flux(device = self.params.device, dtype= self.params.dtype), self.params)
@@ -30,7 +28,6 @@ class TryOnPipeline:
             self.REPO_REDUX_HF,
             torch_dtype = self.params.dtype, 
             low_cpu_mem_usage=True,
-            # do_rescale = False
             ).to(self.params.device)
         
         self.processor_config = PreprocessConfig(
@@ -38,7 +35,6 @@ class TryOnPipeline:
             grow_padding= self.params.grow_padding
         )
         self.processor = PreprocessImage(self.processor_config)
-    
 
     def _load_components(self, input : dict):
         pipeline = input['pipeline']
@@ -51,13 +47,11 @@ class TryOnPipeline:
             dtype_kwargs['torch_dtype'] = dtype
 
         if subfolder in ['transformer', 'vae']:
-
             if device:
                 model = pipeline.from_pretrained(repo, subfolder = subfolder, low_cpu_mem_usage=False, local_files_only=True, **dtype_kwargs).to(device)
             else:
                 model = pipeline.from_pretrained(repo, subfolder = subfolder,low_cpu_mem_usage=False, local_files_only=True, **dtype_kwargs)
             return {subfolder : model}
-        
         else:
             return {subfolder : None}
     
@@ -120,7 +114,7 @@ class TryOnPipeline:
         pipe.transformer.__class__.enable_teacache = True
         pipe.transformer.__class__.cnt = 0
         pipe.transformer.__class__.num_steps = params.num_steps
-        pipe.transformer.__class__.rel_l1_thresh = params.teacache_coeff # 0.25 for 1.5x speedup, 0.4 for 1.8x speedup, 0.6 for 2.0x speedup, 0.8 for 2.25x speedup
+        pipe.transformer.__class__.rel_l1_thresh = params.teacache_coeff
         pipe.transformer.__class__.accumulated_rel_l1_distance = 0
         pipe.transformer.__class__.previous_modulated_input = None
         pipe.transformer.__class__.previous_residual = None
@@ -135,22 +129,13 @@ class TryOnPipeline:
             pipe.transformer.transformer_blocks = nn.ModuleList([
                 torch.compile(block) for block in pipe.transformer.transformer_blocks
             ])
-        return pipe
-    
-    # def _make_pil(self, input : torch.Tensor, index : int = 0):
-    #     out = ToPILImage()(input[index].to(dtype= torch.float32))
-    #     return out
- 
-    
-    def _make_pil(self, input: torch.Tensor, index: int = 0):
-          
+        return pipe        
+
+    def _make_pil(self, input : torch.Tensor, index : int = 0):
             image = input[index]
-            image = (image / 2 + 0.5).clamp(0, 1)
-            image = image.cpu().float()
-            from torchvision.transforms import ToPILImage
+            image = image.to(dtype= torch.float32).clamp(0, 1)
             out = ToPILImage()(image)
             return out
-
 
     def _make_tensor(self, input):
         img = ToTensor()(input)
@@ -165,7 +150,6 @@ class TryOnPipeline:
         image = self._make_pil(image)
         return image
         
-
     def __call__(self, subject_url : str, garment_url : str):
         image, mask, subject_width = self.processor.preprocess(subject_url, garment_url)
         _, gar_img = self.processor.split(image, subject_width)
@@ -253,32 +237,22 @@ class TryOnPipeline:
         
         gen_img = self._make_pil(gen_img)
         return [gen_img, mask_d_comp]
-    
 
-if __name__ == "__main__":
-    params = GenerateConfig(
-        num_steps= 5,
-        seed = 42,
-        sampler = 'euler',
-        scheduler= 'simple',
-        flux_guidance = 30,
-        CFG = 1.,
-        redux_strength= 0.7,
-        redux_strength_type= "multiply",
-        ACE_scale= 0.,
-        dtype = torch.bfloat16,
-    )
+# if __name__ == "__main__":
+#     params = GenerateConfig(
+#         num_steps= 5,
+#         seed = 42,
+#         sampler = 'euler',
+#         scheduler= 'simple',
+#         flux_guidance = 30,
+#         CFG = 1.,
+#         redux_strength= 0.7,
+#         redux_strength_type= "multiply",
+#         ACE_scale= 0.,
+#         dtype = torch.bfloat16,
+#     )
 
-    subject_url = "https://res.cloudinary.com/dukgi26uv/image/upload/v1754051392/tryon-images/r1srtslvfaya3hnpndoh.jpg"
-    garment_url = "https://res.cloudinary.com/dukgi26uv/image/upload/v1754049604/tryon-images/vwckkvaqvmxd0ap9xroi.jpg"
+#     subject_url = "https://res.cloudinary.com/dukgi26uv/image/upload/v1754051392/tryon-images/r1srtslvfaya3hnpndoh.jpg"
+#     garment_url = "https://res.cloudinary.com/dukgi26uv/image/upload/v1754049604/tryon-images/vwckkvaqvmxd0ap9xroi.jpg"
 
-    generate(subject_url, garment_url, params)
-
-
-
-
-
-
-
-
-
+#     generate(subject_url, garment_url, params)
