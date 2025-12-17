@@ -148,26 +148,19 @@ def run_tryon(subject_url: str, garment_url: str):
 
     pipe = TryOnPipeline(params)
     out = pipe(subject_url, garment_url)
-
-    image_list = []
-    for img in out:
-        import io
-        byte_arr = io.BytesIO()
-        img.save(byte_arr, format='PNG')
-        image_list.append(byte_arr.getvalue())
         
-    return image_list
+    return out
 
 
-@app.local_entrypoint()
-def main():
-    image_bytes_list = run_tryon.remote(
-        "https://res.cloudinary.com/dukgi26uv/image/upload/v1754049601/tryon-images/fx3mo7u3n0i42tcod9qv.jpg",
-        "https://res.cloudinary.com/dukgi26uv/image/upload/v1759842480/Manchester_United_Home_92.94_Shirt_kyajol.webp"
-    )
+# @app.local_entrypoint()
+# def main():
+#     image_bytes_list = run_tryon.remote(
+#         "https://res.cloudinary.com/dukgi26uv/image/upload/v1754049601/tryon-images/fx3mo7u3n0i42tcod9qv.jpg",
+#         "https://res.cloudinary.com/dukgi26uv/image/upload/v1759842480/Manchester_United_Home_92.94_Shirt_kyajol.webp"
+#     )
     
-    for idx, img in enumerate(image_bytes_list):
-        img.save(f'output_{idx}.png')
+#     for idx, img in enumerate(image_bytes_list):
+#         img.save(f'output_{idx}.png')
             
     
-    print("Images saved as output_*.png")
+#     print("Images saved as output_*.png")

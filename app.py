@@ -5,6 +5,7 @@ import cloudinary
 import cloudinary.uploader
 from PIL import Image
 from dotenv import load_dotenv
+import os
 load_dotenv()
 
 cloudinary.config(
@@ -34,11 +35,11 @@ def process_tryon(subject_file, subject_url_input, garment_file, garment_url_inp
         output_bytes_list = tryon_fn.remote(sub_url, garm_url)
         
         result_images = []
-        for img_bytes in output_bytes_list:
-            result_images.append(Image.open(io.BytesIO(img_bytes)))
+        for idx, img in enumerate(output_bytes_list):
+            result_images.append(img)
             
         if result_images:
-            return [result_images[0]]
+            return result_images[0]
         return []
 
     finally:
@@ -98,4 +99,4 @@ with gr.Blocks(css=custom_css) as demo:
     )
 
 if __name__ == "__main__":
-    demo.launch(server_name="0.0.0.0", server_port=7860)
+    demo.launch(server_name="0.0.0.0", server_port=7860, share=True)

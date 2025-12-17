@@ -141,12 +141,12 @@ def run_tryon():
         CFG=1.,
         redux_strength=0.7,
         logo_redux_strength= 0.7,
-        ACE_scale=1.,
+        ACE_scale=0.,
         dtype=torch.bfloat16,
         compile_repeated= True
     )
 
-    subject_url = "https://res.cloudinary.com/dukgi26uv/image/upload/v1754049601/tryon-images/fx3mo7u3n0i42tcod9qv.jpg"
+    subject_url = "https://res.cloudinary.com/dninf7ktd/image/upload/v1760392302/download_gxmsni.jpg"
     garment_url = "https://res.cloudinary.com/dukgi26uv/image/upload/v1759842480/Manchester_United_Home_92.94_Shirt_kyajol.webp"
 
     pipe = TryOnPipeline(params)
