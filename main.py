@@ -140,6 +140,7 @@ class TryOnPipeline:
     # def _make_pil(self, input : torch.Tensor, index : int = 0):
     #     out = ToPILImage()(input[index].to(dtype= torch.float32))
     #     return out
+ 
     
     def _make_pil(self, input: torch.Tensor, index: int = 0):
           
