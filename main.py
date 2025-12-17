@@ -137,18 +137,18 @@ class TryOnPipeline:
             ])
         return pipe
     
-    # def _make_pil(self, input : torch.Tensor, index : int = 0):
-    #     out = ToPILImage()(input[index].to(dtype= torch.float32))
-    #     return out
-    def _make_pil(self, input: torch.Tensor, index: int = 0):
-            image = input[index]
-            if image.min() < 0:
-                 image = (image / 2 + 0.5).clamp(0, 1)
-            image = image.clamp(0, 1)
-            image = image.to(dtype=torch.float32)
+    def _make_pil(self, input : torch.Tensor, index : int = 0):
+        out = ToPILImage()(input[index].to(dtype= torch.float32))
+        return out
+    # def _make_pil(self, input: torch.Tensor, index: int = 0):
+    #         image = input[index]
+    #         if image.min() < 0:
+    #              image = (image / 2 + 0.5).clamp(0, 1)
+    #         image = image.clamp(0, 1)
+    #         image = image.to(dtype=torch.float32)
 
-            out = ToPILImage()(image)
-            return out
+    #         out = ToPILImage()(image)
+    #         return out
 
 
     def _make_tensor(self, input):
