@@ -4,11 +4,13 @@ import io
 import cloudinary
 import cloudinary.uploader
 from PIL import Image
+from dotenv import load_dotenv
+load_dotenv()
 
 cloudinary.config(
-  cloud_name = "dninf7ktd",
-  api_key = "397378833169215",
-  api_secret = "ieKthadLxbVR6abtjzC3F6wbcqQ"
+  cloud_name = os.getenv("CLOUD_NAME"),
+  api_key = os.getenv("CLOUDINARY_API_KEY"),
+  api_secret = os.getenv("CLOUDINARY_API_SECRET")
 )
 
 tryon_fn = modal.Function.from_name("tryon-inference", "run_tryon")
