@@ -157,11 +157,6 @@ class TryOnInference:
 
     @modal.method()
     def run_tryon(self, subject_url: str, garment_url: str):
-        if hasattr(self.pipeline.flux_pipe.transformer, 'cnt'):
-            self.pipeline.flux_pipe.transformer.cnt = 0
-            self.pipeline.flux_pipe.transformer.accumulated_rel_l1_distance = 0
-            self.pipeline.flux_pipe.transformer.previous_modulated_input = None
-            self.pipeline.flux_pipe.transformer.previous_residual = None
         out = self.pipeline(subject_url, garment_url)
 
         image_list = []

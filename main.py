@@ -155,8 +155,16 @@ class TryOnPipeline:
         image = self._make_pil(image)
         return image
         
+    def _reset_teacache(self):
+        self.flux_pipe.transformer.__class__.cnt = 0
+        self.flux_pipe.transformer.__class__.accumulated_rel_l1_distance = 0
+        self.flux_pipe.transformer.__class__.previous_modulated_input = None
+        self.flux_pipe.transformer.__class__.previous_residual = None
 
     def __call__(self, subject_url : str, garment_url : str):
+
+        self._reset_teacache()
+
         image, mask, subject_width = self.processor.preprocess(subject_url, garment_url)
         _, gar_img = self.processor.split(image, subject_width)
         garment_pil = self._make_pil(gar_img)
@@ -198,6 +206,7 @@ class TryOnPipeline:
         num_logos = logo_images.size()[0]
 
         if num_logos:
+            self._reset_teacache()
             redux_embeds_logo_prompt = []
             redux_embeds_logo_pooled = []
             for i in range(num_logos):
