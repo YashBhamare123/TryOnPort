@@ -134,7 +134,7 @@ def run_tryon(subject_url:str, garment_url:str):
     from main import TryOnPipeline, GenerateConfig
     
     params = GenerateConfig(
-        num_steps=10,
+        num_steps=25,
         num_steps_logo= 10,
         seed=42,
         sampler='euler',
