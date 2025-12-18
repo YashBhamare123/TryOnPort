@@ -6,6 +6,7 @@ import cloudinary.uploader
 from PIL import Image
 from dotenv import load_dotenv
 import os
+
 load_dotenv()
 
 cloudinary.config(
@@ -32,14 +33,17 @@ def process_tryon(subject_file, subject_url_input, garment_file, garment_url_inp
         return None
 
     try:
-        output_bytes_list = tryon_fn.remote(sub_url, garm_url)
+        output_data = tryon_fn.remote(sub_url, garm_url)
         
         result_images = []
-        for idx, img in enumerate(output_bytes_list):
-            result_images.append(img)
+        for item in output_data:
+            if isinstance(item, Image.Image):
+                result_images.append(item)
+            elif isinstance(item, (bytes, bytearray)):
+                result_images.append(Image.open(io.BytesIO(item)))
             
         if result_images:
-            return result_images[0]
+            return [result_images[0]]
         return []
 
     finally:
@@ -49,48 +53,65 @@ def process_tryon(subject_file, subject_url_input, garment_file, garment_url_inp
             cloudinary.uploader.destroy(garm_id)
 
 custom_css = """
-.fixed-height-img img {
-    max-height: 300px !important; 
-    object-fit: contain !important;
+.output-gallery-class {
+    height: 75vh !important; 
+    min-height: 500px !important;
+    display: flex;
+    flex-direction: column;
 }
 
-.output-gallery-class {
-    min-height: 500px !important;
+.output-gallery-class .grid-wrap, 
+.output-gallery-class .grid-container {
+    height: 100% !important;
 }
 
 .output-gallery-class img {
-    object-fit: contain !important;
-    max-height: 80vh !important;
+    height: 100% !important;
     width: 100% !important;
+    object-fit: contain !important;
+    object-position: center !important;
+    display: block;
+}
+
+.output-gallery-class .thumbnails {
+    display: none !important;
+}
+
+.or-divider {
+    text-align: center;
+    font-weight: bold;
+    color: #888;
+    margin: 5px 0;
 }
 """
 
-with gr.Blocks(css=custom_css) as demo:
+with gr.Blocks(css=custom_css, title="Virtual Try-On") as demo:
     with gr.Row():
-        with gr.Column():
-            with gr.Tabs():
-                with gr.TabItem("Upload Image"):
-                    subject_image = gr.Image(label="Subject Image", type="filepath", elem_classes="fixed-height-img")
-                with gr.TabItem("Paste URL"):
-                    subject_url = gr.Textbox(label="Subject URL")
+        
+        with gr.Column(scale=1):
+            with gr.Group():
+                gr.Markdown("### Subject Image")
+                subject_image = gr.Image(label="Upload Subject", type="filepath")
+                gr.HTML("<div class='or-divider'>— OR —</div>")
+                subject_url = gr.Textbox(label="Paste Subject URL", placeholder="https://...")
 
-            with gr.Tabs():
-                with gr.TabItem("Upload Image"):
-                    garment_image = gr.Image(label="Garment Image", type="filepath", elem_classes="fixed-height-img")
-                with gr.TabItem("Paste URL"):
-                    garment_url = gr.Textbox(label="Garment URL")
+            with gr.Group():
+                gr.Markdown("### Garment Image")
+                garment_image = gr.Image(label="Upload Garment", type="filepath")
+                gr.HTML("<div class='or-divider'>— OR —</div>")
+                garment_url = gr.Textbox(label="Paste Garment URL", placeholder="https://...")
 
-            run_button = gr.Button("Run Try-On", variant="primary")
-            
-        with gr.Column():
+        with gr.Column(scale=1):
             output_gallery = gr.Gallery(
                 label="Result", 
                 columns=1, 
-                height="auto", 
-                format="png",
+                rows=1,
+                show_label=True,
                 elem_classes="output-gallery-class",
-                preview=True
+                preview=True, 
+                interactive=False
             )
+            run_button = gr.Button("Run Try-On", variant="primary", size="lg")
 
     run_button.click(
         fn=process_tryon,

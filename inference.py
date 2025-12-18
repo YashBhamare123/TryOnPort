@@ -154,7 +154,7 @@ def run_tryon(subject_url:str, garment_url:str):
 
 @app.local_entrypoint()
 def main():
-    image_bytes_list = run_tryon.remote("https://res.cloudinary.com/dukgi26uv/image/upload/v1754049601/tryon-images/fx3mo7u3n0i42tcod9qv.jpg", "https://res.cloudinary.com/dukgi26uv/image/upload/v1759842480/Manchester_United_Home_92.94_Shirt_kyajol.webp")
+    image_bytes_list = run_tryon.remote("https://res.cloudinary.com/dninf7ktd/image/upload/v1760381909/1_b1qjko.jpg", "https://res.cloudinary.com/dukgi26uv/image/upload/v1759842480/Manchester_United_Home_92.94_Shirt_kyajol.webp")
 
     
     for idx, img in enumerate(image_bytes_list):
