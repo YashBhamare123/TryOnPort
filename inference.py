@@ -3,9 +3,7 @@ import modal
 from pathlib import Path
 
 app = modal.App("tryon-inference")
-
 volume = modal.Volume.from_name("huggingface-cache", create_if_missing=True)
-
 files_volume = modal.Volume.from_name("tryon-files", create_if_missing=True)
 
 image = (
@@ -92,7 +90,9 @@ image = (
     )
     .pip_install(
         "scipy",
-        "langgraph"
+        "langgraph",
+        "fastapi[standard]",
+        "pydantic" 
     )
     .add_local_dir(
         local_path= '.',
@@ -113,8 +113,11 @@ image = (
         modal.Secret.from_name("huggingface-secret"),
         modal.Secret.from_name("groq-secret"),
     ],
-    max_containers=1 
+
+    max_containers=10,
+
 )
+@modal.concurrent(max_inputs=1)
 class TryOnInference:
 
     @modal.enter()
@@ -156,6 +159,7 @@ class TryOnInference:
         print("Model initialized and cached in memory.")
 
     @modal.method()
+    
     def run_tryon(self, subject_url: str, garment_url: str):
         out = self.pipeline(subject_url, garment_url)
 
@@ -167,6 +171,29 @@ class TryOnInference:
             image_list.append(byte_arr.getvalue())
             
         return image_list
+
+@app.function(image=image)
+@modal.asgi_app()
+@modal.concurrent(max_inputs=100) 
+def fastapi_app():
+    from fastapi import FastAPI, Response
+    from pydantic import BaseModel
+    
+    web_app = FastAPI()
+
+    class TryOnRequest(BaseModel):
+        subject_url: str
+        garment_url: str
+
+    @web_app.post("/generate")
+    async def generate(request: TryOnRequest):
+        image_bytes_list = await TryOnInference().run_tryon.remote.aio(request.subject_url, request.garment_url)
+        
+        if image_bytes_list:
+            return Response(content=image_bytes_list[0], media_type="image/png")
+        return {"error": "Generation failed"}
+
+    return web_app
 
 # @app.local_entrypoint()
 # def main():

@@ -116,14 +116,15 @@ class TryOnPipeline:
         return pipe
     
     def load_flux_with_modules(self, pipe : FluxFillPipeline, params : GenerateConfig):
-        FluxTransformer2DModel.forward = teacache_forward
-        pipe.transformer.__class__.enable_teacache = True
-        pipe.transformer.__class__.cnt = 0
-        pipe.transformer.__class__.num_steps = params.num_steps
-        pipe.transformer.__class__.rel_l1_thresh = params.teacache_coeff # 0.25 for 1.5x speedup, 0.4 for 1.8x speedup, 0.6 for 2.0x speedup, 0.8 for 2.25x speedup
-        pipe.transformer.__class__.accumulated_rel_l1_distance = 0
-        pipe.transformer.__class__.previous_modulated_input = None
-        pipe.transformer.__class__.previous_residual = None
+        # FluxTransformer2DModel.forward = teacache_forward
+        
+        # pipe.transformer.enable_teacache = True
+        # pipe.transformer.cnt = 0
+        # pipe.transformer.num_steps = params.num_steps
+        # pipe.transformer.rel_l1_thresh = params.teacache_coeff 
+        # pipe.transformer.accumulated_rel_l1_distance = 0
+        # pipe.transformer.previous_modulated_input = None
+        # pipe.transformer.previous_residual = None
 
         pipe.load_lora_weights(self.REPO_ACE, subfolder = self.REPO_ACE_SUB, weight_name = self.ACE_NAME)
 
@@ -155,15 +156,25 @@ class TryOnPipeline:
         image = self._make_pil(image)
         return image
         
-    def _reset_teacache(self):
-        self.flux_pipe.transformer.__class__.cnt = 0
-        self.flux_pipe.transformer.__class__.accumulated_rel_l1_distance = 0
-        self.flux_pipe.transformer.__class__.previous_modulated_input = None
-        self.flux_pipe.transformer.__class__.previous_residual = None
+    # def _reset_teacache(self):
+
+    #     torch.cuda.empty_cache()
+        
+    #     # Reset Instance Variables
+    #     self.flux_pipe.transformer.cnt = 0
+    #     self.flux_pipe.transformer.accumulated_rel_l1_distance = 0
+    #     self.flux_pipe.transformer.previous_modulated_input = None
+    #     self.flux_pipe.transformer.previous_residual = None
+
+    #     # Reset Class Variables (Safety Net)
+    #     self.flux_pipe.transformer.__class__.cnt = 0
+    #     self.flux_pipe.transformer.__class__.accumulated_rel_l1_distance = 0
+    #     self.flux_pipe.transformer.__class__.previous_modulated_input = None
+    #     self.flux_pipe.transformer.__class__.previous_residual = None
 
     def __call__(self, subject_url : str, garment_url : str):
 
-        self._reset_teacache()
+        # self._reset_teacache()
 
         image, mask, subject_width = self.processor.preprocess(subject_url, garment_url)
         _, gar_img = self.processor.split(image, subject_width)
@@ -206,7 +217,7 @@ class TryOnPipeline:
         num_logos = logo_images.size()[0]
 
         if num_logos:
-            self._reset_teacache()
+            # self._reset_teacache()
             redux_embeds_logo_prompt = []
             redux_embeds_logo_pooled = []
             for i in range(num_logos):

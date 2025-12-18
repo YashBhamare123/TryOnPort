@@ -1,24 +1,29 @@
 import gradio as gr
-import modal
+import requests 
 import io
 import cloudinary
 import cloudinary.uploader
 from PIL import Image
 from dotenv import load_dotenv
 import os
+import asyncio
+from fastapi import FastAPI
 
 load_dotenv()
 
+app = FastAPI()
+
 cloudinary.config(
-  cloud_name = os.getenv("CLOUD_NAME"),
-  api_key = os.getenv("CLOUDINARY_API_KEY"),
-  api_secret = os.getenv("CLOUDINARY_API_SECRET")
+    cloud_name=os.getenv("CLOUD_NAME"),
+    api_key=os.getenv("CLOUDINARY_API_KEY"),
+    api_secret=os.getenv("CLOUDINARY_API_SECRET")
 )
 
-tryon_cls = modal.Cls.from_name("tryon-inference", "TryOnInference")
 
-def process_tryon(subject_file, subject_url_input, garment_file, garment_url_input):
-    def get_url_and_id(file_obj, url_str):
+API_URL = "https://me240003014--tryon-inference-fastapi-app.modal.run/generate" 
+
+async def process_tryon(subject_file, subject_url_input, garment_file, garment_url_input):
+    def get_url_and_id_sync(file_obj, url_str):
         if url_str and url_str.strip():
             return url_str.strip(), None
         elif file_obj is not None:
@@ -26,35 +31,38 @@ def process_tryon(subject_file, subject_url_input, garment_file, garment_url_inp
             return response["secure_url"], response["public_id"]
         return None, None
 
-    sub_url, sub_id = get_url_and_id(subject_file, subject_url_input)
-    garm_url, garm_id = get_url_and_id(garment_file, garment_url_input)
+    sub_url, sub_id = await asyncio.to_thread(get_url_and_id_sync, subject_file, subject_url_input)
+    garm_url, garm_id = await asyncio.to_thread(get_url_and_id_sync, garment_file, garment_url_input)
 
     if not sub_url or not garm_url:
         return None
 
     try:
-        # CHANGED: Instantiate the class () and call the method
-        output_data = tryon_cls().run_tryon.remote(sub_url, garm_url)
+        payload = {
+            "subject_url": sub_url,
+            "garment_url": garm_url
+        }
+
+        response = await asyncio.to_thread(requests.post, API_URL, json=payload, timeout=600)
         
-        result_images = []
-        for item in output_data:
-            if isinstance(item, Image.Image):
-                result_images.append(item)
-            elif isinstance(item, (bytes, bytearray)):
-                result_images.append(Image.open(io.BytesIO(item)))
+        if response.status_code == 200:
+            image_bytes = response.content
+            return [Image.open(io.BytesIO(image_bytes))]
+        else:
+            print(f"API Error: {response.status_code} - {response.text}")
+            return []
             
-        if result_images:
-            return [result_images[0]]
+    except Exception as e:
+        print(f"Connection Error: {e}")
         return []
 
     finally:
         if sub_id:
-            cloudinary.uploader.destroy(sub_id)
+            await asyncio.to_thread(cloudinary.uploader.destroy, sub_id)
         if garm_id:
-            cloudinary.uploader.destroy(garm_id)
+            await asyncio.to_thread(cloudinary.uploader.destroy, garm_id)
 
 custom_css = """
-/* --- Output Gallery Styling (Right Side) --- */
 .output-gallery-class {
     height: 75vh !important; 
     min-height: 500px !important;
@@ -79,17 +87,15 @@ custom_css = """
     display: none !important;
 }
 
-/* --- Input Image Styling (Left Side - Smaller) --- */
 .input-image-class {
-    max-height: 300px !important; /* Limits height of the container */
+    max-height: 300px !important;
 }
 
 .input-image-class img {
     object-fit: contain !important; 
-    max-height: 280px !important; /* Limits height of the actual image */
+    max-height: 280px !important;
 }
 
-/* --- General UI --- */
 .or-divider {
     text-align: center;
     font-weight: bold;
@@ -98,13 +104,11 @@ custom_css = """
 }
 """
 
-with gr.Blocks(title="Virtual Try-On") as demo:
+with gr.Blocks(title="Virtual Try-On", css=custom_css) as demo:
     with gr.Row():
-        
         with gr.Column(scale=1):
             with gr.Group():
                 gr.Markdown("### Subject Image")
-               
                 subject_image = gr.Image(label="Upload Subject", type="filepath", elem_classes="input-image-class")
                 gr.HTML("<div class='or-divider'>— OR —</div>")
                 subject_url = gr.Textbox(label="Paste Subject URL", placeholder="https://...")
@@ -127,14 +131,11 @@ with gr.Blocks(title="Virtual Try-On") as demo:
             )
             run_button = gr.Button("Run Try-On", variant="primary", size="lg")
 
+    demo.queue(default_concurrency_limit=None)
     run_button.click(
         fn=process_tryon,
         inputs=[subject_image, subject_url, garment_image, garment_url],
         outputs=output_gallery
     )
 
-if __name__ == "__main__":
-    demo.launch(server_name="0.0.0.0", 
-                server_port=7860, 
-                share=True,
-                css=custom_css)
+app = gr.mount_gradio_app(app, demo, path="/")
