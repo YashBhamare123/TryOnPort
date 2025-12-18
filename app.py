@@ -15,7 +15,7 @@ cloudinary.config(
   api_secret = os.getenv("CLOUDINARY_API_SECRET")
 )
 
-tryon_fn = modal.Function.from_name("tryon-inference", "run_tryon")
+tryon_cls = modal.Cls.from_name("tryon-inference", "TryOnInference")
 
 def process_tryon(subject_file, subject_url_input, garment_file, garment_url_input):
     def get_url_and_id(file_obj, url_str):
@@ -33,7 +33,8 @@ def process_tryon(subject_file, subject_url_input, garment_file, garment_url_inp
         return None
 
     try:
-        output_data = tryon_fn.remote(sub_url, garm_url)
+        # CHANGED: Instantiate the class () and call the method
+        output_data = tryon_cls().run_tryon.remote(sub_url, garm_url)
         
         result_images = []
         for item in output_data:
@@ -53,6 +54,7 @@ def process_tryon(subject_file, subject_url_input, garment_file, garment_url_inp
             cloudinary.uploader.destroy(garm_id)
 
 custom_css = """
+/* --- Output Gallery Styling (Right Side) --- */
 .output-gallery-class {
     height: 75vh !important; 
     min-height: 500px !important;
@@ -77,6 +79,17 @@ custom_css = """
     display: none !important;
 }
 
+/* --- Input Image Styling (Left Side - Smaller) --- */
+.input-image-class {
+    max-height: 300px !important; /* Limits height of the container */
+}
+
+.input-image-class img {
+    object-fit: contain !important; 
+    max-height: 280px !important; /* Limits height of the actual image */
+}
+
+/* --- General UI --- */
 .or-divider {
     text-align: center;
     font-weight: bold;
@@ -85,19 +98,20 @@ custom_css = """
 }
 """
 
-with gr.Blocks(css=custom_css, title="Virtual Try-On") as demo:
+with gr.Blocks(title="Virtual Try-On") as demo:
     with gr.Row():
         
         with gr.Column(scale=1):
             with gr.Group():
                 gr.Markdown("### Subject Image")
-                subject_image = gr.Image(label="Upload Subject", type="filepath")
+               
+                subject_image = gr.Image(label="Upload Subject", type="filepath", elem_classes="input-image-class")
                 gr.HTML("<div class='or-divider'>— OR —</div>")
                 subject_url = gr.Textbox(label="Paste Subject URL", placeholder="https://...")
 
             with gr.Group():
                 gr.Markdown("### Garment Image")
-                garment_image = gr.Image(label="Upload Garment", type="filepath")
+                garment_image = gr.Image(label="Upload Garment", type="filepath", elem_classes="input-image-class")
                 gr.HTML("<div class='or-divider'>— OR —</div>")
                 garment_url = gr.Textbox(label="Paste Garment URL", placeholder="https://...")
 
@@ -120,4 +134,7 @@ with gr.Blocks(css=custom_css, title="Virtual Try-On") as demo:
     )
 
 if __name__ == "__main__":
-    demo.launch(server_name="0.0.0.0", server_port=7860, share=True)
+    demo.launch(server_name="0.0.0.0", 
+                server_port=7860, 
+                share=True,
+                css=custom_css)

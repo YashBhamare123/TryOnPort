@@ -104,61 +104,83 @@ image = (
     )
 )
 
-@app.function(
+@app.cls(
     image=image,
     gpu="A100",
     timeout=600,
-    volumes={
-        "/cache": volume,
-        "/files": files_volume,
-    },
+    volumes={"/cache": volume, "/files": files_volume},
     secrets=[
         modal.Secret.from_name("huggingface-secret"),
         modal.Secret.from_name("groq-secret"),
     ],
+    max_containers=1 
 )
-def run_tryon(subject_url:str, garment_url:str):
-    import os
-    import sys
-    
-    os.environ["HF_HOME"] = "/cache"
-    os.environ["TRANSFORMERS_CACHE"] = "/cache"
-    os.environ["HF_HUB_CACHE"] = "/cache"
-    os.environ["HF_ENABLE_PARALLEL_SHARD_DOWNLOAD"] = "1"
-    os.environ['TORCH_HOME'] = '/cache/torch'
-    
-    os.makedirs("/cache/compile", exist_ok=True)
-    sys.path.insert(0, "/root/files")
+class TryOnInference:
 
-    import torch
-    from main import TryOnPipeline, GenerateConfig
-    
-    params = GenerateConfig(
-        num_steps=25,
-        num_steps_logo= 10,
-        seed=42,
-        sampler='euler',
-        flux_guidance=40,
-        CFG=1.,
-        redux_strength=0.7,
-        logo_redux_strength= 0.7,
-        ACE_scale=1.,
-        dtype=torch.bfloat16,
-        compile_repeated= True
-    )
+    @modal.enter()
+    def initialize_model(self):
+        import os
+        import sys
+        
+        # Set Env Variables
+        os.environ["HF_HOME"] = "/cache"
+        os.environ["TRANSFORMERS_CACHE"] = "/cache"
+        os.environ["HF_HUB_CACHE"] = "/cache"
+        os.environ["HF_ENABLE_PARALLEL_SHARD_DOWNLOAD"] = "1"
+        os.environ['TORCH_HOME'] = '/cache/torch'
+        
+        # Setup paths
+        os.makedirs("/cache/compile", exist_ok=True)
+        sys.path.insert(0, "/root/files")
 
-    pipe = TryOnPipeline(params)
-    out = pipe(subject_url, garment_url)
-    return out
+        import torch
+        from sampling.config import GenerateConfig
+        from main import TryOnPipeline
+        
+        # Load Config
+        self.params = GenerateConfig(
+            num_steps=25,
+            num_steps_logo= 10,
+            seed=42,
+            sampler='euler',
+            flux_guidance=40,
+            CFG=1.0,
+            redux_strength=0.7,
+            logo_redux_strength=0.7,
+            ACE_scale=1.0,
+            dtype=torch.bfloat16,
+            compile_repeated=True
+        )
 
+        self.pipeline = TryOnPipeline(self.params)
+        print("Model initialized and cached in memory.")
 
-@app.local_entrypoint()
-def main():
-    image_bytes_list = run_tryon.remote("https://res.cloudinary.com/dninf7ktd/image/upload/v1760381909/1_b1qjko.jpg", "https://res.cloudinary.com/dukgi26uv/image/upload/v1759842480/Manchester_United_Home_92.94_Shirt_kyajol.webp")
+    @modal.method()
+    def run_tryon(self, subject_url: str, garment_url: str):
+        if hasattr(self.pipeline.flux_pipe.transformer, 'cnt'):
+            self.pipeline.flux_pipe.transformer.cnt = 0
+            self.pipeline.flux_pipe.transformer.accumulated_rel_l1_distance = 0
+            self.pipeline.flux_pipe.transformer.previous_modulated_input = None
+            self.pipeline.flux_pipe.transformer.previous_residual = None
+        out = self.pipeline(subject_url, garment_url)
 
-    
-    for idx, img in enumerate(image_bytes_list):
-        img.save(f'output_{idx}.png')
+        image_list = []
+        for img in out:
+            import io
+            byte_arr = io.BytesIO()
+            img.save(byte_arr, format='PNG')
+            image_list.append(byte_arr.getvalue())
             
-    
-    print("Images saved as output_*.png")
+        return image_list
+
+# @app.local_entrypoint()
+# def main():
+#     inference_service = TryOnInference() 
+#     image_bytes_list = inference_service.run_tryon.remote(
+#         "https://res.cloudinary.com/dukgi26uv/image/upload/v1754049601/tryon-images/fx3mo7u3n0i42tcod9qv.jpg",
+#         "https://res.cloudinary.com/dukgi26uv/image/upload/v1759842480/Manchester_United_Home_92.94_Shirt_kyajol.webp"
+#     )
+#     for idx, img in enumerate(image_bytes_list):
+#         with open(f'output_{idx}.png', 'wb') as f:
+#             f.write(img)
+#     print("Images saved as output_*.png")
