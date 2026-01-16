@@ -16,7 +16,7 @@ class InpaintStitch(BaseModel, arbitrary_types_allowed=True):
     cropped : tuple[torch.Tensor, torch.Tensor]
     coords : list
 
-def load_image_from_url(url : str) -> tuple[torch.Tensor, torch.Tensor | None]:
+def load_image_from_url(url : str, local_file = False) -> tuple[torch.Tensor, torch.Tensor | None]:
     """
     Loads an image from a URL as a PyTorch tensor and returns its RGB tensor and optional alpha mask.
 
@@ -33,7 +33,11 @@ def load_image_from_url(url : str) -> tuple[torch.Tensor, torch.Tensor | None]:
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     }
 
-    img = Image.open(BytesIO(requests.get(url, headers= headers).content))
+    if local_file:
+        img = Image.open(url)
+    else:
+        img = Image.open(BytesIO(requests.get(url, headers= headers).content))
+
     exif_data = img.getexif()
 
 
@@ -141,7 +145,7 @@ class PreprocessImage:
     def __init__(self, params : PreprocessConfig):
         self.params = params
     
-    def preprocess(self, subject_url : str, garment_url : str):
+    def preprocess(self, subject_url : str, garment_url : str, local_file = False):
         """
         Loads, resizes, segments, and concatenates subject and garment images for inpainting.
 
@@ -155,13 +159,13 @@ class PreprocessImage:
                 - inpaint_mask (torch.Tensor): Shape (B, 1, H*, W*) - subject mask + blank garment mask
                 - sub_width (int): Width of subject portion for splitting
         """
-        sub = load_image_from_url(subject_url)
+        sub = load_image_from_url(subject_url, local_file)
         sub_img = sub[0]
 
         # show_tensor(sub_img, 'after load')
 
         sub_trans_mask = sub[1]
-        gar_img = load_image_from_url(garment_url)[0]
+        gar_img = load_image_from_url(garment_url, local_file)[0]
 
         sub_img = resize_image(sub_img, self.params.resized_height, self.params.resized_width, self.params.keep_ratio, self.params.resize_mode)
         gar_img = resize_image(gar_img, self.params.resized_height, self.params.resized_width, self.params.keep_ratio, self.params.resize_mode)

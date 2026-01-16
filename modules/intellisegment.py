@@ -93,13 +93,16 @@ Example: "light green long-sleeve blazer over white t-shirt, dark blue full-leng
 3. LEG COVERAGE (if applicable):
    - Length (short/mini, knee-length, mid-calf/capri, full-length/maxi)
 
+4. IF MULTIPLE CLOTHES IN IMAGE, THEN DECRIBE ALL OF THEM IN DETAIL
+
 Format: "[garment type], [sleeve details if top], [length details if bottom/dress]"
 Example: "light blue long-sleeve hoodie, long sleeves ending at wrist"
 Example: "dark blue full-length pants, full-length ending at ankle"
 Example: "pink full-length jumpsuit with long sleeves, long sleeves ending at wrist, full-length ending at ankle"
 Example: "red short-sleeve soccer jersey, short sleeves ending at mid-upper-arm"
 Example: "maxi skirt, full-length ending at ankle"
-Example: "black bra and underwear, sleeveless top, minimal leg coverage"""
+Example: "black bra and underwear, sleeveless top, minimal leg coverage
+Example: "White shirt, full length ending at wrist, Blue jeans, full length ending at ankle"""
 
         completion = self.client.chat.completions.create(
             model="meta-llama/llama-4-scout-17b-16e-instruct",

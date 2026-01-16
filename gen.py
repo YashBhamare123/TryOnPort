@@ -1,10 +1,8 @@
 import modal
-from pathlib import Path
 
 app = modal.App("tryon-inference")
 
 volume = modal.Volume.from_name("huggingface-cache", create_if_missing=True)
-
 files_volume = modal.Volume.from_name("tryon-files", create_if_missing=True)
 
 image = (
@@ -86,26 +84,34 @@ image = (
     )
     .apt_install("git")
     .run_commands(
-        "pip install git+https://github.com/YashBhamare123/diffusers.git && huggingface-cli login --token $HF_TOKEN",
+        "huggingface-cli login --token $HF_TOKEN",
         secrets=[modal.Secret.from_name("huggingface-secret")],
     )
     .pip_install(
         "scipy",
-        "langgraph"
+        "langgraph",
+        "fastapi[standard]"
     )
+    .run_commands('git clone https://github.com/YashBhamare123/diffusers.git && pip install -e diffusers')
+    .run_commands('cd diffusers && git pull origin main', force_build= True)
     .add_local_dir(
         local_path= '.',
         remote_path= '/root/files',
         ignore=[
         ".*",        
-        "**/.*",     
+        "**/.*",
+        "*.png",
+        "*.jpg",
+        "*.webp",
+        "*.jpeg",
+        "__pycache__/*",
+        "images/*"
     ],
     )
 )
-
 @app.function(
     image=image,
-    gpu="A100",
+    gpu="H100",
     timeout=600,
     volumes={
         "/cache": volume,
@@ -116,7 +122,8 @@ image = (
         modal.Secret.from_name("groq-secret"),
     ],
 )
-def run_tryon():
+
+def run_tryon(subject_url: str, garment_url : str, control_url : str, config : dict, local_file = False):
     import os
     import sys
     
@@ -131,35 +138,81 @@ def run_tryon():
 
     import torch
     from main import TryOnPipeline, GenerateConfig
-    
-    params = GenerateConfig(
-        num_steps=10,
-        num_steps_logo= 10,
-        seed=42,
-        sampler='euler',
-        flux_guidance=40,
-        CFG=1.,
-        redux_strength=0.7,
-        logo_redux_strength= 0.7,
-        ACE_scale=1.,
-        dtype=torch.bfloat16,
-        compile_repeated= True
-    )
-
-    subject_url = "https://res.cloudinary.com/dukgi26uv/image/upload/v1754049601/tryon-images/fx3mo7u3n0i42tcod9qv.jpg"
-    garment_url = "https://res.cloudinary.com/dukgi26uv/image/upload/v1759842480/Manchester_United_Home_92.94_Shirt_kyajol.webp"
-
+    params = GenerateConfig(**config)
     pipe = TryOnPipeline(params)
-    out = pipe(subject_url, garment_url)
-    return out
+    out = pipe(subject_url, garment_url, control_url, local_file)
+    return [out]
 
+@app.function(image = image)
+@modal.asgi_app()
+def fastapi_app():
+    import io
+    from fastapi import FastAPI, Response
+    from pydantic import BaseModel
+    from typing import Union, Literal
+    import torch
+    webapp = FastAPI()
+
+    class GenerateConfig(BaseModel):
+        model_config = {"arbitrary_types_allowed": True}
+        num_steps : int
+        num_steps_logo : int
+        seed : int
+        sampler : Union[Literal['euler'], Literal['dmpp_3_sde']]
+        flux_guidance : float
+        cache_conditioning : bool = True
+        # CFG : float
+        device : str = 'cuda'
+        dtype : torch.dtype = torch.bfloat16
+        redux_strength : float
+        logo_redux_strength : float
+        ACE_scale : float
+        compile_repeated : bool = False
+        teacache_coeff : float = 0.1
+        image_res : int = 1024
+        grow_padding : int = 20
+    
+    class CreatePredictions(BaseModel):
+        subject_url : str
+        garment_url : str
+        control_url : str
+        config : GenerateConfig
+
+    @webapp.post('/tryon')
+    def tryon(data : CreatePredictions):
+        out = run_tryon.remote(data.subject_url, data.garment_url, data.control_url, data.config.model_dump())
+        buf = io.BytesIO()
+        out[0].save(buf, format="PNG")
+
+        return Response(
+            content=buf.getvalue(),
+            media_type="image/png"
+        )
+    return webapp
 
 @app.local_entrypoint()
 def main():
-    image_bytes_list = run_tryon.remote()
+    import torch
+    config = {
+        "num_steps": 25,
+        "num_steps_logo": 10,
+        "seed": 39,
+        "sampler": "euler",
+        "flux_guidance": 40,
+        # "CFG": 1.0,
+        "redux_strength": 0.2,
+        "logo_redux_strength": 0.2,
+        "ACE_scale": 1.0,
+        "dtype": torch.bfloat16,
+        "compile_repeated": True
+    }
+
+    subject_url = "/files/subject.jpg"
+    garment_url = "/files/garment.webp"
+    control_url = "/files/control.png"
+    image_bytes_list = run_tryon.remote(subject_url, garment_url, control_url, config, local_file = True)
     
-    for idx, img in enumerate(image_bytes_list):
-        img.save(f'output_{idx}.png')
+    for img in image_bytes_list:
+        img.save(f'images/outputs/out.png')
             
-    
-    print("Images saved as output_*.png")
+    print("Images saved as out.png")

@@ -98,10 +98,18 @@ def create_masks_subject(img : torch.Tensor, labels: SegmentCategories) -> torch
 
     processor = SegformerImageProcessor.from_pretrained('YashBhamare123/segformer_finetune', subfolder = 'segformer_b2_clothes_epoch_13')
     model = AutoModelForSemanticSegmentation.from_pretrained('YashBhamare123/segformer_finetune', subfolder = 'segformer_b2_clothes_epoch_13')
-    model = model.to('cuda')
+
+    if torch.cuda.is_available():
+        model = model.to('cuda')
+    else:
+        model = model.to('cpu')
+
     print('after_loading_1')
     inputs = processor(pil_img, return_tensors = 'pt')
-    inputs['pixel_values'] = inputs['pixel_values'].to('cuda')
+
+    if torch.cuda.is_available():
+        inputs['pixel_values'] = inputs['pixel_values'].to('cuda')
+
     out = model(**inputs)
 
     print('after_out_1')
@@ -133,12 +141,13 @@ def create_masks_subject(img : torch.Tensor, labels: SegmentCategories) -> torch
 def create_masks_garment(img: torch.Tensor, labels: FashionLabels) -> torch.Tensor:
     img = img[0]
     img = ToPILImage()(img)
-
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
     processor = SegformerImageProcessor.from_pretrained('sayeed99/segformer-b3-fashion')
     model = AutoModelForSemanticSegmentation.from_pretrained('sayeed99/segformer-b3-fashion')
-    model = model.to('cuda')
+    model = model.to(device)
+
     inps = processor(img, return_tensors = 'pt')
-    inps['pixel_values'] = inps['pixel_values'].to('cuda')
+    inps['pixel_values'] = inps['pixel_values'].to(device)
     out = model(**inps)
     logits = out.logits.detach().cpu()
     upsampled_logits = nn.functional.interpolate(
@@ -165,12 +174,14 @@ def create_masks_garment(img: torch.Tensor, labels: FashionLabels) -> torch.Tens
 
 
 if __name__ == "__main__":
-    url = 'https://res.cloudinary.com/dukgi26uv/image/upload/v1754143626/tryon-images/v7mzzq0rivocfutzc57e.jpg'
-    img = Image.open(requests.get(url, stream = True).raw)
+
+    import io
+    url = 'https://res.cloudinary.com/dukgi26uv/image/upload/v1760105214/One_leg_up_web_nizit6.webp'
+    img = Image.open(io.BytesIO(requests.get(url).content))
     img = PILToTensor()(img).unsqueeze(0)
-    labels = SegmentCategories(upper_clothes= True, pants = True)
+    labels = SegmentCategories(upper_clothes= True, left_arm= True, right_arm= True)
     labels_gar = FashionLabels(unlabelled= False)
-    mask = create_masks_garment(img, labels_gar)
+    mask = create_masks_subject(img, labels)
     mask = ToPILImage()(mask[0])
     mask.save('file.png')
 

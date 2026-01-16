@@ -1,6 +1,7 @@
 Pillow
 datasets
-ultralytics
 torch
 torchvision
-tqdm
+dwpose
+opencv-python
+pydantic

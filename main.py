@@ -1,8 +1,10 @@
+import requests
+import io
 import torch
 import torch.nn.functional as F
 import time
 import joblib
-from diffusers import FluxFillPipeline, FluxPriorReduxPipeline, AutoencoderKL, FluxTransformer2DModel, FlowMatchEulerDiscreteScheduler
+from diffusers import FluxFillPipeline, FluxPriorReduxPipeline, AutoencoderKL, FluxTransformer2DModel, FlowMatchEulerDiscreteScheduler, FluxControlNetModel, FluxFillControlNetPipeline
 from transformers import T5EncoderModel, CLIPTextModel, CLIPTokenizer, T5Tokenizer
 from diffusers.utils import load_image
 from huggingface_hub import hf_hub_download
@@ -21,10 +23,11 @@ class TryOnPipeline:
     REPO_ACE = "ali-vilab/ACE_Plus"
     REPO_ACE_SUB = "subject"
     ACE_NAME = "comfyui_subject_lora16.safetensors"
+    CONTROL_REPO = "Shakker-Labs/FLUX.1-dev-ControlNet-Union-Pro"
 
-    
     def __init__(self, params : GenerateConfig):
         self.params = params
+        self.controlnet = FluxControlNetModel.from_pretrained(self.CONTROL_REPO, torch_dtype=torch.bfloat16)
         self.flux_pipe = self.load_flux_with_modules(self._load_pipe_flux(device = self.params.device, dtype= self.params.dtype), self.params)
         self.redux_pipe = FluxPriorReduxPipeline.from_pretrained(
             self.REPO_REDUX_HF,
@@ -38,7 +41,6 @@ class TryOnPipeline:
             grow_padding= self.params.grow_padding
         )
         self.processor = PreprocessImage(self.processor_config)
-    
 
     def _load_components(self, input : dict):
         pipeline = input['pipeline']
@@ -50,16 +52,16 @@ class TryOnPipeline:
         if dtype:
             dtype_kwargs['torch_dtype'] = dtype
 
-        if subfolder in ['transformer', 'vae']:
+        # if subfolder in ['transformer', 'vae']:
 
-            if device:
-                model = pipeline.from_pretrained(repo, subfolder = subfolder, low_cpu_mem_usage=False, local_files_only=True, **dtype_kwargs).to(device)
-            else:
-                model = pipeline.from_pretrained(repo, subfolder = subfolder,low_cpu_mem_usage=False, local_files_only=True, **dtype_kwargs)
-            return {subfolder : model}
-        
+        if device:
+            model = pipeline.from_pretrained(repo, subfolder = subfolder, low_cpu_mem_usage=True, device_map = 'auto', local_files_only=True, **dtype_kwargs).to(device)
         else:
-            return {subfolder : None}
+            model = pipeline.from_pretrained(repo, subfolder = subfolder,low_cpu_mem_usage=True,  device_map = 'auto', local_files_only=True, **dtype_kwargs)
+        return {subfolder : model}
+        
+        # else:
+            # return {subfolder : None}
     
     def _load_pipe_flux(self, device : str, dtype : torch.dtype) -> FluxFillPipeline:
         components = [
@@ -112,18 +114,18 @@ class TryOnPipeline:
         scheduler = FlowMatchEulerDiscreteScheduler() 
         out.update({"scheduler" : scheduler})
 
-        pipe = FluxFillPipeline(**out).to(device)
+        pipe = FluxFillControlNetPipeline(controlnet = self.controlnet, **out).to(device)
         return pipe
     
     def load_flux_with_modules(self, pipe : FluxFillPipeline, params : GenerateConfig):
-        FluxTransformer2DModel.forward = teacache_forward
-        pipe.transformer.__class__.enable_teacache = True
-        pipe.transformer.__class__.cnt = 0
-        pipe.transformer.__class__.num_steps = params.num_steps
-        pipe.transformer.__class__.rel_l1_thresh = params.teacache_coeff # 0.25 for 1.5x speedup, 0.4 for 1.8x speedup, 0.6 for 2.0x speedup, 0.8 for 2.25x speedup
-        pipe.transformer.__class__.accumulated_rel_l1_distance = 0
-        pipe.transformer.__class__.previous_modulated_input = None
-        pipe.transformer.__class__.previous_residual = None
+        # FluxTransformer2DModel.forward = teacache_forward
+        # pipe.transformer.__class__.enable_teacache = True
+        # pipe.transformer.__class__.cnt = 0
+        # pipe.transformer.__class__.num_steps = params.num_steps
+        # pipe.transformer.__class__.rel_l1_thresh = params.teacache_coeff # 0.25 for 1.5x speedup, 0.4 for 1.8x speedup, 0.6 for 2.0x speedup, 0.8 for 2.25x speedup
+        # pipe.transformer.__class__.accumulated_rel_l1_distance = 0
+        # pipe.transformer.__class__.previous_modulated_input = None
+        # pipe.transformer.__class__.previous_residual = None
 
         pipe.load_lora_weights(self.REPO_ACE, subfolder = self.REPO_ACE_SUB, weight_name = self.ACE_NAME)
 
@@ -154,23 +156,53 @@ class TryOnPipeline:
         image = image * mask + background * composite_factor
         image = self._make_pil(image)
         return image
-        
+    
+    def _load_image(self, image_url : str, is_mask : bool = False, local_file = False):
 
-    def __call__(self, subject_url : str, garment_url : str):
-        image, mask, subject_width = self.processor.preprocess(subject_url, garment_url)
-        _, gar_img = self.processor.split(image, subject_width)
+        if local_file:
+            image = Image.open(image_url)
+        else:
+            response = requests.get(image_url)
+            image = Image.open(io.BytesIO(response.content))
+
+        if is_mask:
+            image = image.convert(mode='L')
+        return image
+
+
+    def __call__(self, subject_url : str, garment_url : str, control_url : str, local_file = False):
+        image, mask, subject_width = self.processor.preprocess(subject_url, garment_url, local_file)
+        sub_img, gar_img = self.processor.split(image, subject_width)
+        dummy = torch.zeros((gar_img.size()[0], 3, gar_img.size()[2], gar_img.size()[3]))
         garment_pil = self._make_pil(gar_img)
-        
+       
         redux_embeds = self.redux_pipe(
             garment_pil,
             prompt_embeds_scale= self.params.redux_strength
         )
 
+        print(f"Redux Embedding Size {redux_embeds['prompt_embeds'].size()}")
+        # Control image processing to add garment side by side
+        control_image = self._load_image(control_url, local_file = local_file)
+        control_image = self._make_tensor(control_image)
+        control_image = F.interpolate(
+            control_image,
+            size = (sub_img.size()[2], sub_img.size()[3]),
+            mode = 'bilinear',
+            align_corners= False
+        )
+        control_image = torch.concat([control_image, dummy], dim = 3)
+        control_image = self._make_pil(control_image)
+        
+
+        # Main pipeline starts here
         _, _, H, W = image.size()
         image = image.to(device= self.params.device, dtype = self.params.dtype)
         mask = mask.to(device= self.params.device, dtype = self.params.dtype)
 
         out = self.flux_pipe(
+            # prompt = 'a machester united jersey which is worn by a girl',
+            control_image = control_image,
             image = image,
             mask_image = mask,
             height = H,
@@ -178,10 +210,14 @@ class TryOnPipeline:
             guidance_scale = self.params.flux_guidance,
             num_inference_steps = self.params.num_steps,
             joint_attention_kwargs= {"scale" : 0},
-            cfg = self.params.CFG,
+            control_mode = 4,
+            controlnet_conditioning_scale = 0.9,
+            control_guidance_end=0.65,
+            # cfg = self.params.CFG,
             generator = torch.Generator(self.params.device).manual_seed(self.params.seed),
             **redux_embeds
         ).images[0]
+        return out
         
         out = self._make_tensor(out)
         out = F.interpolate(
@@ -242,7 +278,7 @@ class TryOnPipeline:
             gen_img = deconcatenation(gen_img, out, o_w, mm_bbox, blend_amount= 0.0)
         
         gen_img = self._make_pil(gen_img)
-        return [gen_img, mask_d_comp]
+        return gen_img
     
 
 if __name__ == "__main__":

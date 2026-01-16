@@ -5,6 +5,21 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "datasets>=4.4.2",
+    "dotenv>=0.9.9",
+    "dwpose>=1.0.1",
+    "fal-client>=0.8.1",
+    "groq>=1.0.0",
+    "langgraph>=1.0.5",
+    "matplotlib>=3.10.8",
     "modal>=1.2.1",
+    "opencv-python>=4.12.0.88",
     "pillow>=12.0.0",
+    "pydantic>=2.12.5",
+    "requests>=2.32.5",
+    "scikit-image>=0.26.0",
+    "scipy>=1.16.3",
+    "torch>=2.9.1",
+    "torchvision>=0.24.1",
+    "transformers>=4.57.3",
 ]

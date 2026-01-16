@@ -10,7 +10,7 @@ class GenerateConfig(BaseModel):
     sampler : Union[Literal['euler'], Literal['dmpp_3_sde']]
     flux_guidance : float
     cache_conditioning : bool = True
-    CFG : float
+    # CFG : float
     device : str = 'cuda'
     dtype : torch.dtype = torch.bfloat16
     redux_strength : float
